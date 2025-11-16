@@ -38,23 +38,7 @@ class BoatRaceScraper:
         }
 
         # データベース接続
-        # IPv4を強制するために接続文字列を修正
-        db_url = os.getenv('DATABASE_URL')
-        # GitHub ActionsでIPv6を回避するためのホスト名解決
-        import socket
-        try:
-            # ホスト名からIPv4アドレスを取得
-            host = 'db.ngpniiosmxxkryldadna.supabase.co'
-            ipv4_addr = socket.getaddrinfo(host, None, socket.AF_INET)[0][4][0]
-            # hostaddrパラメータを追加してIPv4を強制
-            if '?' in db_url:
-                db_url += f'&hostaddr={ipv4_addr}'
-            else:
-                db_url += f'?hostaddr={ipv4_addr}'
-        except Exception as e:
-            print(f"Warning: Could not resolve IPv4 address: {e}")
-
-        self.db_conn = psycopg2.connect(db_url)
+        self.db_conn = psycopg2.connect(os.getenv('DATABASE_URL'))
 
     async def fetch_with_retry(self, url, max_retries=3):
         """リトライ機能付きフェッチ"""
