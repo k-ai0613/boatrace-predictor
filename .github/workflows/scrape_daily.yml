@@ -25,7 +25,7 @@ jobs:
 
     - name: Force IPv4 for Supabase
       run: |
-        IPV4=$(getent ahostsv4 db.ngpniiosmxxkryldadna.supabase.co | head -1 | awk '{print $1}')
+        IPV4=$(python3 -c "import socket; print(socket.gethostbyname('db.ngpniiosmxxkryldadna.supabase.co'))")
         echo "$IPV4 db.ngpniiosmxxkryldadna.supabase.co" | sudo tee -a /etc/hosts
         sudo sysctl -w net.ipv6.conf.all.disable_ipv6=1
         sudo sysctl -w net.ipv6.conf.default.disable_ipv6=1
