@@ -1,0 +1,43 @@
+name: Scrape Daily Data
+
+on:
+  schedule:
+    # 毎日 JST 7:00, 14:00, 20:00 に実行
+    - cron: '0 22 * * *'  # JST 7:00 (UTC 22:00前日)
+    - cron: '0 5 * * *'   # JST 14:00 (UTC 5:00)
+    - cron: '0 11 * * *'  # JST 20:00 (UTC 11:00)
+  workflow_dispatch:      # 手動実行可能
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        pip install -r scraper/requirements.txt
+
+    - name: Run daily scraper
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      run: |
+        python scraper/daily_scraper.py
+
+    - name: Log completion
+      run: |
+        echo "Scrape completed at $(date)" >> scrape.log
+        git config user.name github-actions
+        git config user.email github-actions@github.com
+        git add scrape.log
+        git commit -m "Update scrape log" || exit 0
+        git push || exit 0
