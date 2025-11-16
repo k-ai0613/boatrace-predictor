@@ -1,11 +1,11 @@
 name: Scrape Daily Data
 
 on:
-  schedule:
-    # 毎日 JST 7:00, 14:00, 20:00 に実行
-    - cron: '0 22 * * *'  # JST 7:00 (UTC 22:00前日)
-    - cron: '0 5 * * *'   # JST 14:00 (UTC 5:00)
-    - cron: '0 11 * * *'  # JST 20:00 (UTC 11:00)
+  # schedule:
+  #   # 毎日 JST 7:00, 14:00, 20:00 に実行
+  #   - cron: '0 22 * * *'  # JST 7:00 (UTC 22:00前日)
+  #   - cron: '0 5 * * *'   # JST 14:00 (UTC 5:00)
+  #   - cron: '0 11 * * *'  # JST 20:00 (UTC 11:00)
   workflow_dispatch:      # 手動実行可能
 
 jobs:
