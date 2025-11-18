@@ -32,20 +32,13 @@ jobs:
         HOST=$(echo "${{ secrets.DATABASE_URL }}" | sed -n 's/.*@\([^:]*\):.*/\1/p')
         echo "Original host: $HOST"
 
-        # IPv4アドレスを解決（Google DNS 8.8.8.8 を使用）
-        IPV4=$(dig @8.8.8.8 +short -t A "$HOST" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -n1)
+        # Pythonを使ってIPv4アドレスを解決
+        IPV4=$(python scraper/resolve_ipv4.py "$HOST")
         echo "Resolved IPv4: $IPV4"
 
         # IPv4アドレスが取得できたか確認
         if [ -z "$IPV4" ]; then
           echo "Error: Failed to resolve IPv4 address"
-          echo "Trying with nslookup..."
-          IPV4=$(nslookup "$HOST" 8.8.8.8 | grep -A1 "Name:" | grep "Address:" | tail -n1 | awk '{print $2}' | grep -v ':')
-          echo "nslookup result: $IPV4"
-        fi
-
-        if [ -z "$IPV4" ]; then
-          echo "Error: All DNS resolution methods failed"
           exit 1
         fi
 
