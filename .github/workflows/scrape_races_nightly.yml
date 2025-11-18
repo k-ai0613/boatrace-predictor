@@ -2,9 +2,9 @@ name: Scrape Race Data Nightly
 
 on:
   schedule:
-    # 毎日21:00（JST）に実行
-    # JST 21:00 = UTC 12:00
-    - cron: '0 12 * * *'
+    # 毎日深夜3:00（JST）に実行
+    # JST 3:00 = UTC 18:00（前日）
+    - cron: '0 18 * * *'
   workflow_dispatch:      # 手動実行可能
 
 jobs:
@@ -26,11 +26,27 @@ jobs:
       run: |
         pip install -r scraper/requirements.txt
 
+    - name: Resolve IPv4 address for Supabase
+      run: |
+        # Supabaseのホスト名からIPv4アドレスを取得
+        HOST=$(echo "${{ secrets.DATABASE_URL }}" | sed -n 's/.*@\([^:]*\):.*/\1/p')
+        echo "Original host: $HOST"
+
+        # IPv4アドレスを解決
+        IPV4=$(getent ahostsv4 "$HOST" | head -n1 | awk '{print $1}')
+        echo "Resolved IPv4: $IPV4"
+
+        # DATABASE_URLのホスト名をIPv4に置き換え
+        DATABASE_URL_IPV4=$(echo "${{ secrets.DATABASE_URL }}" | sed "s/@${HOST}/@${IPV4}/")
+
+        # 環境変数ファイルに保存
+        echo "DATABASE_URL_IPV4=$DATABASE_URL_IPV4" >> $GITHUB_ENV
+
     - name: Run race data scraper
       env:
-        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        DATABASE_URL: ${{ env.DATABASE_URL_IPV4 }}
       run: |
-        python scraper/collect_gentle.py --days 30
+        python scraper/collect_gentle.py --days 7
 
     - name: Log completion
       run: |
