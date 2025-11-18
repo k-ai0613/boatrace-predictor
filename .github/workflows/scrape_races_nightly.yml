@@ -32,9 +32,15 @@ jobs:
         HOST=$(echo "${{ secrets.DATABASE_URL }}" | sed -n 's/.*@\([^:]*\):.*/\1/p')
         echo "Original host: $HOST"
 
-        # IPv4アドレスを解決
-        IPV4=$(getent ahostsv4 "$HOST" | head -n1 | awk '{print $1}')
+        # IPv4アドレスを解決（digコマンドを使用、AAAAレコードを除外）
+        IPV4=$(dig +short -t A "$HOST" | head -n1)
         echo "Resolved IPv4: $IPV4"
+
+        # IPv4アドレスが取得できたか確認
+        if [ -z "$IPV4" ]; then
+          echo "Error: Failed to resolve IPv4 address"
+          exit 1
+        fi
 
         # DATABASE_URLのホスト名をIPv4に置き換え
         DATABASE_URL_IPV4=$(echo "${{ secrets.DATABASE_URL }}" | sed "s/@${HOST}/@${IPV4}/")
