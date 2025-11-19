@@ -1,0 +1,121 @@
+name: Test Data Collection
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_date:
+        description: '対象日付 (YYYY-MM-DD形式。空欄で前日)'
+        required: false
+        default: ''
+      max_venues:
+        description: '収集する会場数 (1-24。テスト時は3程度推奨)'
+        required: false
+        default: '3'
+      max_races:
+        description: '1会場あたりのレース数 (1-12。テスト時は3程度推奨)'
+        required: false
+        default: '3'
+
+jobs:
+  test-collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        pip install -r scraper/requirements.txt
+
+    - name: Test data collection
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      run: |
+        python -c "
+        import asyncio
+        import sys
+        import os
+        from datetime import datetime, timedelta
+        import aiohttp
+
+        sys.path.insert(0, os.path.join(os.getcwd(), 'scraper'))
+        from boatrace_scraper import BoatRaceScraper
+
+        async def test_collection():
+            scraper = BoatRaceScraper()
+            async with aiohttp.ClientSession() as session:
+                scraper.session = session
+
+                # 対象日付の設定
+                target_date_str = '${{ github.event.inputs.target_date }}'
+                if target_date_str:
+                    target_date = datetime.strptime(target_date_str, '%Y-%m-%d')
+                else:
+                    target_date = datetime.now() - timedelta(days=1)
+
+                max_venues = int('${{ github.event.inputs.max_venues }}')
+                max_races = int('${{ github.event.inputs.max_races }}')
+
+                print(f'=== Test Data Collection Started ===')
+                print(f'Target date: {target_date.strftime(\"%Y-%m-%d\")}')
+                print(f'Max venues: {max_venues}')
+                print(f'Max races per venue: {max_races}')
+                print('')
+
+                results = []
+                for venue_id in range(1, max_venues + 1):
+                    print(f'Collecting venue {venue_id}...')
+                    for race_number in range(1, max_races + 1):
+                        try:
+                            result = await scraper.fetch_race_result(target_date, venue_id, race_number)
+                            if result:
+                                results.append(result)
+                                print(f'  Race {race_number}: OK')
+                            else:
+                                print(f'  Race {race_number}: No data')
+                        except Exception as e:
+                            print(f'  Race {race_number}: Error - {e}')
+
+                # データベースに保存
+                if results:
+                    scraper.save_to_db(results)
+                    print(f'')
+                    print(f'=== Test Collection Completed ===')
+                    print(f'Total races collected: {len(results)}')
+
+                    # 取得したカラムのサンプルを表示
+                    if results:
+                        sample = results[0]
+                        print(f'')
+                        print(f'Sample data structure:')
+                        print(f'  Race info: date, venue_id, race_number, grade, race_time')
+                        if sample.get('entries'):
+                            entry = sample['entries'][0]
+                            print(f'  Entry keys: {list(entry.keys())}')
+                        if sample.get('weather'):
+                            print(f'  Weather keys: {list(sample[\"weather\"].keys())}')
+                        if sample.get('beforeinfo'):
+                            boat_num = list(sample['beforeinfo'].keys())[0]
+                            print(f'  Beforeinfo keys: {list(sample[\"beforeinfo\"][boat_num].keys())}')
+                else:
+                    print(f'')
+                    print(f'=== No data collected ===')
+
+                scraper.close()
+
+        asyncio.run(test_collection())
+        "
+
+    - name: Summary
+      if: always()
+      run: |
+        echo "Test collection finished at $(date)"
+        echo "Check the logs above for details"
