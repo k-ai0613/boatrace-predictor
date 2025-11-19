@@ -30,7 +30,7 @@ jobs:
       env:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
       run: |
-        python scraper/collect_gentle.py --days 7
+        python scraper/collect_gentle.py --days 30
 
     - name: Log completion
       run: |
