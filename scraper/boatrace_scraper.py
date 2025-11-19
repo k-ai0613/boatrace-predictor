@@ -682,15 +682,18 @@ class BoatRaceScraper:
 
             # 風向き（風速の隣または別要素）
             wind_direction_elem = weather_div.select_one('.is-wind .weather1_bodyUnitLabelTitle')
-            if wind_direction_elem:
-                weather_data['wind_direction'] = wind_direction_elem.text.strip()
+            wind_direction_text = wind_direction_elem.text.strip() if wind_direction_elem else None
+
+            # 取得したテキストに方位が含まれているかチェック（「風速」などのラベルを除外）
+            import re
+            if wind_direction_text and re.search(r'[東西南北]', wind_direction_text):
+                weather_data['wind_direction'] = wind_direction_text
             else:
                 # 風向きが風速と同じ要素に含まれている場合もある
                 wind_full_elem = weather_div.select_one('.is-wind')
                 if wind_full_elem:
                     wind_full_text = wind_full_elem.text.strip()
                     # "3m 北東" のような形式から方向を抽出
-                    import re
                     direction_match = re.search(r'[東西南北]+', wind_full_text)
                     if direction_match:
                         weather_data['wind_direction'] = direction_match.group(0)
