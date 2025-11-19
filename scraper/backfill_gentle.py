@@ -47,6 +47,25 @@ class GentleBackfillScraper(BoatRaceScraper):
         await asyncio.sleep(random.uniform(0.5, 2.0))
         return await super().fetch_with_retry(url, max_retries)
 
+    def _reconnect_db(self):
+        """データベース接続を再確立"""
+        try:
+            # 既存の接続をクローズ
+            if hasattr(self, 'db_conn') and self.db_conn:
+                try:
+                    self.db_conn.close()
+                except:
+                    pass
+
+            # 新しい接続を作成
+            import psycopg2
+            import os
+            self.db_conn = psycopg2.connect(os.getenv('DATABASE_URL'))
+            print("  [DB] 接続を再確立しました")
+        except Exception as e:
+            print(f"  [DB] 再接続エラー: {e}")
+            raise
+
     async def scrape_single_day(self, date):
         """
         1日分のデータを取得（進捗表示強化版）
@@ -84,10 +103,29 @@ class GentleBackfillScraper(BoatRaceScraper):
             # 会場間で少し待機
             await asyncio.sleep(1)
 
+        # データベース接続を確認して再接続（長時間実行対策）
+        try:
+            cursor = self.db_conn.cursor()
+            cursor.execute("SELECT 1")
+            cursor.close()
+        except:
+            print("  [DB] 接続が切断されています。再接続します...")
+            self._reconnect_db()
+
         # データベースに保存
         if results:
-            self.save_to_db(results)
-            print(f"\n✓ 完了: {total_races} レース保存 (スキップ: {skipped_races})")
+            try:
+                self.save_to_db(results)
+                print(f"\n[OK] 完了: {total_races} レース保存 (スキップ: {skipped_races})")
+            except Exception as e:
+                print(f"\n[ERROR] 保存エラー: {e}")
+                # 再接続して再試行
+                self._reconnect_db()
+                try:
+                    self.save_to_db(results)
+                    print(f"\n[OK] 再試行成功: {total_races} レース保存")
+                except Exception as e2:
+                    print(f"\n[ERROR] 再試行も失敗: {e2}")
         else:
             print(f"\n- データなし (スキップ: {skipped_races})")
 
@@ -123,7 +161,7 @@ class GentleBackfillScraper(BoatRaceScraper):
                     await asyncio.sleep(3)
 
             print("\n" + "="*60)
-            print(f"✓ バックフィル完了: {total_days}日分のデータを再取得しました")
+            print(f"[OK] バックフィル完了: {total_days}日分のデータを再取得しました")
             print("="*60)
 
     def _create_session(self):

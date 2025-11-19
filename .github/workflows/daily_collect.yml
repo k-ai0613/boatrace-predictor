@@ -1,0 +1,81 @@
+name: Daily Race Data Collection
+
+on:
+  schedule:
+    # 毎日22:00 JST (13:00 UTC) に実行
+    - cron: '0 13 * * *'
+  workflow_dispatch:      # 手動実行可能
+
+jobs:
+  collect-daily:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120  # 2時間
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        pip install -r scraper/requirements.txt
+
+    - name: Collect recent race data
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      run: |
+        # 直近3日分のデータを収集（漏れ防止）
+        python -c "
+        import asyncio
+        import sys
+        import os
+        from datetime import datetime, timedelta
+        import aiohttp
+
+        sys.path.insert(0, os.path.join(os.getcwd(), 'scraper'))
+        from boatrace_scraper import BoatRaceScraper
+
+        async def collect_recent_days():
+            scraper = BoatRaceScraper()
+            async with aiohttp.ClientSession() as session:
+                scraper.session = session
+
+                results = []
+                # 直近3日分
+                for days_ago in range(3):
+                    target_date = datetime.now() - timedelta(days=days_ago)
+                    print(f'Collecting data for {target_date.strftime(\"%Y-%m-%d\")}...')
+
+                    for venue_id in range(1, 25):
+                        for race_number in range(1, 13):
+                            try:
+                                result = await scraper.fetch_race_result(target_date, venue_id, race_number)
+                                if result:
+                                    results.append(result)
+                            except Exception as e:
+                                print(f'Error: {e}')
+
+                    # 1日分ごとに保存
+                    if results:
+                        scraper.save_to_db(results)
+                        print(f'Saved {len(results)} races for {target_date.strftime(\"%Y-%m-%d\")}')
+                        results = []
+
+                scraper.close()
+
+        asyncio.run(collect_recent_days())
+        "
+
+    - name: Log completion
+      run: |
+        echo "Daily collection completed at $(date)" >> daily_collect.log
+        git config user.name github-actions
+        git config user.email github-actions@github.com
+        git add daily_collect.log || exit 0
+        git commit -m "Update daily collection log" || exit 0
+        git push || exit 0
