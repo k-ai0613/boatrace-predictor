@@ -161,11 +161,28 @@ class BoatRaceScraper:
 
                 # 着順（全角数字の可能性あり）
                 position_text = cols[0].text.strip()
-                # 全角数字を半角に変換
-                position_text = position_text.translate(
-                    str.maketrans('０１２３４５６７８９', '0123456789')
-                )
-                result_position = int(position_text)
+
+                # 特殊な着順をチェック（転覆、不成立、欠場、フライング）
+                special_positions = {
+                    '転': None,  # 転覆
+                    '不': None,  # 不成立
+                    '欠': None,  # 欠場
+                    'Ｆ': None,  # フライング（全角）
+                    'F': None,   # フライング（半角）
+                }
+
+                if position_text in special_positions:
+                    result_position = special_positions[position_text]
+                else:
+                    # 全角数字を半角に変換
+                    position_text = position_text.translate(
+                        str.maketrans('０１２３４５６７８９', '0123456789')
+                    )
+                    try:
+                        result_position = int(position_text)
+                    except ValueError:
+                        # パースできない場合はNULL
+                        result_position = None
 
                 # 枠番/艇番
                 boat_number = int(cols[1].text.strip())
