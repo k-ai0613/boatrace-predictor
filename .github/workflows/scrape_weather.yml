@@ -1,0 +1,44 @@
+name: Scrape Weather Data
+
+on:
+  schedule:
+    # 毎日3回実行（JST 7:00, 12:00, 17:00）
+    # レース直前の天気データを収集
+    - cron: '0 22 * * *'  # JST 7:00 (UTC 22:00前日)
+    - cron: '0 3 * * *'   # JST 12:00 (UTC 3:00)
+    - cron: '0 8 * * *'   # JST 17:00 (UTC 8:00)
+  workflow_dispatch:      # 手動実行可能
+
+jobs:
+  scrape-weather:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        pip install -r scraper/requirements.txt
+
+    - name: Run weather scraper
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      run: |
+        python scraper/weather_scraper.py
+
+    - name: Log completion
+      run: |
+        echo "Weather data collected at $(date)" >> weather_scrape.log
+        git config user.name github-actions
+        git config user.email github-actions@github.com
+        git add weather_scrape.log || exit 0
+        git commit -m "Update weather scrape log" || exit 0
+        git push || exit 0

@@ -1,0 +1,49 @@
+name: Backfill Historical Data
+
+on:
+  workflow_dispatch:      # 手動実行のみ（安全のため）
+    inputs:
+      start_date:
+        description: '開始日 (YYYY-MM-DD)'
+        required: true
+        default: '2024-10-19'
+      end_date:
+        description: '終了日 (YYYY-MM-DD)'
+        required: true
+        default: '2024-11-23'
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360  # 6時間（余裕を持たせる）
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        pip install -r scraper/requirements.txt
+
+    - name: Run backfill script
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      run: |
+        python scraper/backfill_gentle.py \
+          --start ${{ github.event.inputs.start_date }} \
+          --end ${{ github.event.inputs.end_date }}
+
+    - name: Log completion
+      run: |
+        echo "Backfill completed: ${{ github.event.inputs.start_date }} to ${{ github.event.inputs.end_date }} at $(date)" >> backfill.log
+        git config user.name github-actions
+        git config user.email github-actions@github.com
+        git add backfill.log || exit 0
+        git commit -m "Update backfill log" || exit 0
+        git push || exit 0
