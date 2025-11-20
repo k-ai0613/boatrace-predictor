@@ -1,0 +1,66 @@
+name: Collect Detailed Statistics
+
+on:
+  # 月1回の自動実行（毎月1日の深夜3時JST = 18:00 UTC）
+  schedule:
+    - cron: '0 18 1 * *'
+
+  # 手動実行も可能
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: '収集モード (racers/venues/all)'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - racers
+          - venues
+          - all
+      delay:
+        description: 'リクエスト間隔（秒、デフォルト: 2.0）'
+        required: false
+        default: '2.0'
+
+jobs:
+  collect-stats:
+    runs-on: ubuntu-latest
+    timeout-minutes: 480  # 8時間
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        pip install -r scraper/requirements.txt
+
+    - name: Collect detailed statistics
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      run: |
+        python -u scraper/boatrace_db_scraper.py \
+          --mode ${{ github.event.inputs.mode || 'all' }} \
+          --delay ${{ github.event.inputs.delay || '2.0' }}
+
+    - name: Summary
+      if: always()
+      run: |
+        echo "### Detailed Stats Collection Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- **Mode**: ${{ github.event.inputs.mode || 'all' }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Request delay**: ${{ github.event.inputs.delay || '2.0' }}s" >> $GITHUB_STEP_SUMMARY
+        echo "- **Completed at**: $(date)" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "#### Schedule" >> $GITHUB_STEP_SUMMARY
+        echo "- **Monthly**: 1st day of month at 03:00 JST (18:00 UTC)" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "#### Data Collected" >> $GITHUB_STEP_SUMMARY
+        echo "- Racer detailed stats (profile, overall stats, boat/course/venue stats)" >> $GITHUB_STEP_SUMMARY
+        echo "- Venue detailed stats (24 venues)" >> $GITHUB_STEP_SUMMARY

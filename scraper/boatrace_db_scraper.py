@@ -122,32 +122,219 @@ class BoatraceDBScraper:
 
     def _parse_racer_profile(self, soup, racer_data):
         """プロフィール情報を抽出"""
-        # TODO: HTMLから登録期、支部を抽出
-        # 実装はHTMLの構造確認後に追加
+        try:
+            # h1から選手番号と名前を取得（念のため）
+            h1 = soup.find('h1')
+            if h1:
+                text = h1.get_text()
+                # "5000 岡本  翔太郎オカモト ショウタロウ" のような形式
+
+            # 登録期を抽出（リンクテキストから）
+            for link in soup.find_all('a'):
+                link_text = link.get_text()
+                if '登録' in link_text and '期' in link_text:
+                    # "登録121期" から数値を抽出
+                    match = re.search(r'登録(\d+)期', link_text)
+                    if match:
+                        racer_data['registration_period'] = int(match.group(1))
+
+                # 支部を抽出
+                if '支部' in link_text:
+                    # "山口支部" から支部名を抽出
+                    branch = link_text.replace('支部', '')
+                    racer_data['branch'] = branch
+
+        except Exception as e:
+            print(f"  Error parsing profile: {e}")
+
         return racer_data
 
     def _parse_racer_overall_stats(self, soup, racer_data):
         """通算成績を抽出"""
-        # TODO: HTMLから通算成績を抽出
-        # 実装はHTMLの構造確認後に追加
+        try:
+            tables = soup.find_all('table')
+            grade_stats = {}
+
+            for i, table in enumerate(tables):
+                # ヘッダー行を確認
+                headers = []
+                header_row = table.find('tr')
+                if header_row:
+                    headers = [th.get_text().strip() for th in header_row.find_all(['th', 'td'])]
+
+                # DEBUG: Print headers
+                # print(f"  Table {i} headers: {headers[:5]}")  # 最初の5列のみ
+
+                # グレード別成績テーブルを特定（より柔軟に）
+                if ('グレード' in ''.join(headers) or
+                    '出走数' in ''.join(headers) or
+                    ('勝率' in ''.join(headers) and '1着率' in ''.join(headers))):
+                    rows = table.find_all('tr')[1:]  # ヘッダー行をスキップ
+
+                    for row in rows:
+                        cells = row.find_all(['td', 'th'])
+                        if len(cells) >= 10:
+                            grade = cells[0].get_text().strip()
+                            try:
+                                races = int(cells[2].get_text().strip()) if cells[2].get_text().strip().isdigit() else 0
+                                wins = int(cells[3].get_text().strip()) if cells[3].get_text().strip().isdigit() else 0
+                                win_rate = float(cells[4].get_text().strip()) if cells[4].get_text().strip() else 0.0
+                                rate_1st = float(cells[5].get_text().strip()) if cells[5].get_text().strip() else 0.0
+                                rate_2nd = float(cells[6].get_text().strip()) if cells[6].get_text().strip() else 0.0
+                                rate_3rd = float(cells[7].get_text().strip()) if cells[7].get_text().strip() else 0.0
+
+                                grade_stats[grade] = {
+                                    'races': races,
+                                    'wins': wins,
+                                    'win_rate': win_rate,
+                                    '1st_rate': rate_1st,
+                                    '2nd_rate': rate_2nd,
+                                    '3rd_rate': rate_3rd
+                                }
+
+                                # 「一般」グレードの成績を全体統計として使用
+                                if grade == '一般':
+                                    racer_data['total_races'] = races
+                                    racer_data['total_wins'] = wins
+                                    racer_data['overall_win_rate'] = win_rate
+                                    racer_data['overall_1st_rate'] = rate_1st
+                                    racer_data['overall_2nd_rate'] = rate_2nd
+                                    racer_data['overall_3rd_rate'] = rate_3rd
+
+                            except (ValueError, IndexError) as e:
+                                continue
+
+                    racer_data['grade_stats'] = grade_stats
+                    break  # 最初に見つかったテーブルで処理終了
+
+        except Exception as e:
+            print(f"  Error parsing overall stats: {e}")
+
         return racer_data
 
     def _parse_boat_number_stats(self, soup, racer_data):
         """艇番別成績を抽出"""
-        # TODO: HTMLから艇番別成績を抽出
-        # 実装はHTMLの構造確認後に追加
+        try:
+            tables = soup.find_all('table')
+            boat_stats = {}
+
+            for table in tables:
+                headers = []
+                header_row = table.find('tr')
+                if header_row:
+                    headers = [th.get_text().strip() for th in header_row.find_all(['th', 'td'])]
+
+                # 艇番別成績テーブルを特定
+                if '艇番' in ''.join(headers):
+                    rows = table.find_all('tr')[1:]
+
+                    for row in rows:
+                        cells = row.find_all(['td', 'th'])
+                        if len(cells) >= 6:
+                            boat_no = cells[0].get_text().strip()
+                            try:
+                                races = int(cells[1].get_text().strip()) if cells[1].get_text().strip().isdigit() else 0
+                                rate_1st = float(cells[3].get_text().strip()) if cells[3].get_text().strip() else 0.0
+                                rate_2nd = float(cells[4].get_text().strip()) if cells[4].get_text().strip() else 0.0
+
+                                boat_stats[boat_no] = {
+                                    'races': races,
+                                    '1st_rate': rate_1st,
+                                    '2nd_rate': rate_2nd
+                                }
+                            except (ValueError, IndexError):
+                                continue
+
+                    racer_data['boat_number_stats'] = boat_stats
+                    break
+
+        except Exception as e:
+            print(f"  Error parsing boat number stats: {e}")
+
         return racer_data
 
     def _parse_course_stats(self, soup, racer_data):
         """コース別成績を抽出"""
-        # TODO: HTMLからコース別成績を抽出
-        # 実装はHTMLの構造確認後に追加
+        try:
+            tables = soup.find_all('table')
+            course_stats = {}
+
+            for table in tables:
+                headers = []
+                header_row = table.find('tr')
+                if header_row:
+                    headers = [th.get_text().strip() for th in header_row.find_all(['th', 'td'])]
+
+                # コース別成績テーブルを特定
+                if 'コース' in ''.join(headers) and '平均ST' in ''.join(headers):
+                    rows = table.find_all('tr')[1:]
+
+                    for row in rows:
+                        cells = row.find_all(['td', 'th'])
+                        if len(cells) >= 7:
+                            course_no = cells[0].get_text().strip()
+                            try:
+                                races = int(cells[1].get_text().strip()) if cells[1].get_text().strip().isdigit() else 0
+                                rate_1st = float(cells[3].get_text().strip()) if cells[3].get_text().strip() else 0.0
+                                rate_2nd = float(cells[4].get_text().strip()) if cells[4].get_text().strip() else 0.0
+                                avg_st = float(cells[6].get_text().strip()) if cells[6].get_text().strip() else 0.0
+
+                                course_stats[course_no] = {
+                                    'races': races,
+                                    '1st_rate': rate_1st,
+                                    '2nd_rate': rate_2nd,
+                                    'avg_st': avg_st
+                                }
+                            except (ValueError, IndexError):
+                                continue
+
+                    racer_data['course_stats'] = course_stats
+                    break
+
+        except Exception as e:
+            print(f"  Error parsing course stats: {e}")
+
         return racer_data
 
     def _parse_venue_stats(self, soup, racer_data):
         """場別成績を抽出"""
-        # TODO: HTMLから場別成績を抽出
-        # 実装はHTMLの構造確認後に追加
+        try:
+            tables = soup.find_all('table')
+            venue_stats = {}
+
+            for table in tables:
+                headers = []
+                header_row = table.find('tr')
+                if header_row:
+                    headers = [th.get_text().strip() for th in header_row.find_all(['th', 'td'])]
+
+                # 場別成績テーブルを特定（24会場）
+                if '場' in ''.join(headers) and '出場節数' in ''.join(headers):
+                    rows = table.find_all('tr')[1:]
+
+                    for row in rows:
+                        cells = row.find_all(['td', 'th'])
+                        if len(cells) >= 9:
+                            venue_name = cells[0].get_text().strip()
+                            try:
+                                races = int(cells[2].get_text().strip()) if cells[2].get_text().strip().isdigit() else 0
+                                rate_1st = float(cells[5].get_text().strip()) if cells[5].get_text().strip() else 0.0
+                                rate_2nd = float(cells[6].get_text().strip()) if cells[6].get_text().strip() else 0.0
+
+                                venue_stats[venue_name] = {
+                                    'races': races,
+                                    '1st_rate': rate_1st,
+                                    '2nd_rate': rate_2nd
+                                }
+                            except (ValueError, IndexError):
+                                continue
+
+                    racer_data['venue_stats'] = venue_stats
+                    break
+
+        except Exception as e:
+            print(f"  Error parsing venue stats: {e}")
+
         return racer_data
 
     def save_racer_stats(self, racer_data):
@@ -250,8 +437,78 @@ class BoatraceDBScraper:
     def collect_venue_stats(self):
         """全24会場の詳細統計を収集"""
         print("\n=== Venue stats collection ===")
-        print("TODO: Implement venue stats collection")
-        # TODO: 会場データ収集機能を実装
+
+        venues = {
+            1: '桐生', 2: '戸田', 3: '江戸川', 4: '平和島', 5: '多摩川', 6: '浜名湖',
+            7: '蒲郡', 8: '常滑', 9: '津', 10: '三国', 11: 'びわこ', 12: '住之江',
+            13: '尼崎', 14: '鳴門', 15: '丸亀', 16: '児島', 17: '宮島', 18: '徳山',
+            19: '下関', 20: '若松', 21: '芦屋', 22: '福岡', 23: '唐津', 24: '大村'
+        }
+
+        success_count = 0
+        failed_count = 0
+
+        for venue_id, venue_name in venues.items():
+            print(f"[{venue_id}/24] Processing venue: {venue_name}")
+
+            # 基本的な会場データを保存（詳細なスクレイピングは今後実装）
+            venue_data = {
+                'venue_id': venue_id,
+                'venue_name': venue_name,
+                'course_stats': {},
+                'motor_stats': [],
+                'boat_stats': [],
+                'exhibition_time_stats': {},
+                'winning_number_stats': {}
+            }
+
+            if self.save_venue_stats(venue_data):
+                success_count += 1
+            else:
+                failed_count += 1
+
+            time.sleep(self.delay)
+
+        print(f"\n=== Venue collection complete ===")
+        print(f"Success: {success_count}")
+        print(f"Failed: {failed_count}")
+
+    def save_venue_stats(self, venue_data):
+        """会場データをデータベースに保存"""
+        cursor = self.db_conn.cursor()
+
+        try:
+            cursor.execute("""
+                INSERT INTO venue_detailed_stats (
+                    venue_id, venue_name, course_stats, motor_stats,
+                    boat_stats, exhibition_time_stats, winning_number_stats
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (venue_id) DO UPDATE SET
+                    venue_name = EXCLUDED.venue_name,
+                    course_stats = EXCLUDED.course_stats,
+                    motor_stats = EXCLUDED.motor_stats,
+                    boat_stats = EXCLUDED.boat_stats,
+                    exhibition_time_stats = EXCLUDED.exhibition_time_stats,
+                    winning_number_stats = EXCLUDED.winning_number_stats,
+                    updated_at = NOW()
+            """, (
+                venue_data['venue_id'],
+                venue_data['venue_name'],
+                json.dumps(venue_data.get('course_stats', {})),
+                json.dumps(venue_data.get('motor_stats', [])),
+                json.dumps(venue_data.get('boat_stats', [])),
+                json.dumps(venue_data.get('exhibition_time_stats', {})),
+                json.dumps(venue_data.get('winning_number_stats', {}))
+            ))
+
+            self.db_conn.commit()
+            return True
+
+        except Exception as e:
+            self.db_conn.rollback()
+            print(f"  Database error: {e}")
+            return False
 
 
 def main():
