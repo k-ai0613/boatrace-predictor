@@ -1,15 +1,18 @@
 name: Daily Kyotei Data Collection
 
 on:
-  # 毎日深夜2時（JST = UTC+9 → 17:00 UTC）に自動実行
+  # 1日2回の自動実行
   schedule:
+    # 深夜2時（JST = UTC+9 → 17:00 UTC）：前日分の確定データ収集
     - cron: '0 17 * * *'
+    # 夕方6時（JST 18:00 = 09:00 UTC）：当日分の速報データ収集
+    - cron: '0 9 * * *'
 
   # 手動実行も可能
   workflow_dispatch:
     inputs:
       target_date:
-        description: '収集対象日（YYYY-MM-DD形式。空欄で前日）'
+        description: '収集対象日（YYYY-MM-DD形式。空欄で前日、"today"で当日）'
         required: false
         default: ''
       venues:
@@ -40,13 +43,29 @@ jobs:
       run: |
         pip install -r scraper/requirements.txt
 
+    - name: Determine target date
+      id: date
+      run: |
+        # 手動実行時は指定日付、自動実行時は時刻で判定
+        if [ -n "${{ github.event.inputs.target_date }}" ]; then
+          echo "target=${{ github.event.inputs.target_date }}" >> $GITHUB_OUTPUT
+        else
+          # UTC時刻で判定：09:00なら当日、17:00なら前日
+          hour=$(date -u +%H)
+          if [ "$hour" = "09" ]; then
+            echo "target=today" >> $GITHUB_OUTPUT
+          else
+            echo "target=yesterday" >> $GITHUB_OUTPUT
+          fi
+        fi
+
     - name: Collect daily data
       env:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
       run: |
         python -u scraper/collect_historical_data.py \
-          --start-date ${{ github.event.inputs.target_date || 'yesterday' }} \
-          --end-date ${{ github.event.inputs.target_date || 'yesterday' }} \
+          --start-date ${{ steps.date.outputs.target }} \
+          --end-date ${{ steps.date.outputs.target }} \
           --venues ${{ github.event.inputs.venues || '24' }} \
           --races ${{ github.event.inputs.races || '12' }} \
           --delay 2.0 \
@@ -65,7 +84,11 @@ jobs:
       run: |
         echo "### Data Collection Summary" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "- **Date**: ${{ github.event.inputs.target_date || 'yesterday' }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Target date**: ${{ steps.date.outputs.target }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Venues**: ${{ github.event.inputs.venues || '24' }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Races per venue**: ${{ github.event.inputs.races || '12' }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Completed at**: $(date)" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "#### Schedule" >> $GITHUB_STEP_SUMMARY
+        echo "- **02:00 JST (17:00 UTC)**: Previous day's confirmed data" >> $GITHUB_STEP_SUMMARY
+        echo "- **18:00 JST (09:00 UTC)**: Today's race data" >> $GITHUB_STEP_SUMMARY

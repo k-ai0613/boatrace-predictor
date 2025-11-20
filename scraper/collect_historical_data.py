@@ -156,12 +156,16 @@ def main():
     # 日付をパース
     if args.start_date == 'yesterday':
         start_date = datetime.now() - timedelta(days=1)
+    elif args.start_date == 'today':
+        start_date = datetime.now()
     else:
         start_date = datetime.strptime(args.start_date, '%Y-%m-%d')
 
     if args.end_date:
         if args.end_date == 'yesterday':
             end_date = datetime.now() - timedelta(days=1)
+        elif args.end_date == 'today':
+            end_date = datetime.now()
         else:
             end_date = datetime.strptime(args.end_date, '%Y-%m-%d')
     else:
