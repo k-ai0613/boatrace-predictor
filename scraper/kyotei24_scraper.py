@@ -276,6 +276,9 @@ class Kyotei24Scraper:
 
                 # 出走情報を保存
                 for entry in race_data['entries']:
+                    # デバッグ: エントリーデータを出力
+                    print(f"  DEBUG: Saving entry for boat {entry.get('boat_number')}: racer_grade={entry.get('racer_grade')}, win_rate={entry.get('win_rate')}, weight={entry.get('weight')}")
+
                     # レーサー情報を保存
                     cursor.execute("""
                         INSERT INTO racers (racer_number, name)
