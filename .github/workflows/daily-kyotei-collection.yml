@@ -1,0 +1,71 @@
+name: Daily Kyotei Data Collection
+
+on:
+  # 毎日深夜2時（JST = UTC+9 → 17:00 UTC）に自動実行
+  schedule:
+    - cron: '0 17 * * *'
+
+  # 手動実行も可能
+  workflow_dispatch:
+    inputs:
+      target_date:
+        description: '収集対象日（YYYY-MM-DD形式。空欄で前日）'
+        required: false
+        default: ''
+      venues:
+        description: '会場数（1-24、デフォルト: 24）'
+        required: false
+        default: '24'
+      races:
+        description: '1会場あたりのレース数（1-12、デフォルト: 12）'
+        required: false
+        default: '12'
+
+jobs:
+  collect-data:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        pip install -r scraper/requirements.txt
+
+    - name: Collect daily data
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      run: |
+        python -u scraper/collect_historical_data.py \
+          --start-date ${{ github.event.inputs.target_date || 'yesterday' }} \
+          --end-date ${{ github.event.inputs.target_date || 'yesterday' }} \
+          --venues ${{ github.event.inputs.venues || '24' }} \
+          --races ${{ github.event.inputs.races || '12' }} \
+          --delay 2.0 \
+          --max-retries 3
+
+    - name: Upload collection log
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: collection-log
+        path: scraper/*.txt
+        retention-days: 30
+
+    - name: Summary
+      if: always()
+      run: |
+        echo "### Data Collection Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- **Date**: ${{ github.event.inputs.target_date || 'yesterday' }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Venues**: ${{ github.event.inputs.venues || '24' }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Races per venue**: ${{ github.event.inputs.races || '12' }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Completed at**: $(date)" >> $GITHUB_STEP_SUMMARY
