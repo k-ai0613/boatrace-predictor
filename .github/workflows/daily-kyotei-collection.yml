@@ -1,18 +1,16 @@
 name: Daily Kyotei Data Collection
 
 on:
-  # 1日2回の自動実行
+  # 1日1回の自動実行
   schedule:
-    # 深夜2時（JST = UTC+9 → 17:00 UTC）：前日分の確定データ収集
+    # 深夜2時（JST = UTC+9 → 17:00 UTC）：2日前の確定データ収集
     - cron: '0 17 * * *'
-    # 夕方6時（JST 18:00 = 09:00 UTC）：当日分の速報データ収集
-    - cron: '0 9 * * *'
 
   # 手動実行も可能
   workflow_dispatch:
     inputs:
       target_date:
-        description: '収集対象日（YYYY-MM-DD形式。空欄で前日、"today"で当日）'
+        description: '収集対象日（YYYY-MM-DD形式。空欄で2日前）'
         required: false
         default: ''
       venues:
@@ -46,17 +44,13 @@ jobs:
     - name: Determine target date
       id: date
       run: |
-        # 手動実行時は指定日付、自動実行時は時刻で判定
+        # 手動実行時は指定日付、自動実行時は2日前のデータを収集
         if [ -n "${{ github.event.inputs.target_date }}" ]; then
           echo "target=${{ github.event.inputs.target_date }}" >> $GITHUB_OUTPUT
         else
-          # UTC時刻で判定：09:00なら当日、17:00なら前日
-          hour=$(date -u +%H)
-          if [ "$hour" = "09" ]; then
-            echo "target=today" >> $GITHUB_OUTPUT
-          else
-            echo "target=yesterday" >> $GITHUB_OUTPUT
-          fi
+          # 2日前の日付を取得（レース結果確定を保証）
+          target_date=$(date -u -d '2 days ago' +%Y-%m-%d)
+          echo "target=$target_date" >> $GITHUB_OUTPUT
         fi
 
     - name: Collect daily data
@@ -90,5 +84,4 @@ jobs:
         echo "- **Completed at**: $(date)" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "#### Schedule" >> $GITHUB_STEP_SUMMARY
-        echo "- **02:00 JST (17:00 UTC)**: Previous day's confirmed data" >> $GITHUB_STEP_SUMMARY
-        echo "- **18:00 JST (09:00 UTC)**: Today's race data" >> $GITHUB_STEP_SUMMARY
+        echo "- **02:00 JST (17:00 UTC)**: Collects race data from 2 days ago (ensures results are finalized)" >> $GITHUB_STEP_SUMMARY
