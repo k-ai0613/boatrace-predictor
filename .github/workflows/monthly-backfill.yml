@@ -1,0 +1,83 @@
+name: Monthly Data Backfill
+
+on:
+  workflow_dispatch:
+    inputs:
+      year_month:
+        description: '収集対象年月（YYYY-MM形式、例: 2023-06）'
+        required: true
+        type: string
+      venues:
+        description: '会場数（1-24、デフォルト: 24）'
+        required: false
+        default: '24'
+      races:
+        description: '1会場あたりのレース数（1-12、デフォルト: 12）'
+        required: false
+        default: '12'
+      delay:
+        description: 'リクエスト間隔（秒、デフォルト: 2.0）'
+        required: false
+        default: '2.0'
+
+jobs:
+  collect-monthly-data:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360  # 6時間
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        pip install -r scraper/requirements.txt
+        pip install python-dateutil
+
+    - name: Validate year-month format
+      run: |
+        if ! echo "${{ github.event.inputs.year_month }}" | grep -E '^[0-9]{4}-[0-9]{2}$'; then
+          echo "Error: Invalid year-month format. Use YYYY-MM (e.g., 2023-06)"
+          exit 1
+        fi
+
+    - name: Collect monthly data
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      run: |
+        python -u scraper/collect_monthly.py \
+          --year-month ${{ github.event.inputs.year_month }} \
+          --venues ${{ github.event.inputs.venues }} \
+          --races ${{ github.event.inputs.races }} \
+          --delay ${{ github.event.inputs.delay }} \
+          --max-retries 3
+
+    - name: Upload collection log
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: monthly-collection-log-${{ github.event.inputs.year_month }}
+        path: scraper/*.txt
+        retention-days: 90
+
+    - name: Summary
+      if: always()
+      run: |
+        echo "### Monthly Data Collection Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- **Target month**: ${{ github.event.inputs.year_month }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Venues**: ${{ github.event.inputs.venues }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Races per venue**: ${{ github.event.inputs.races }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Request delay**: ${{ github.event.inputs.delay }}s" >> $GITHUB_STEP_SUMMARY
+        echo "- **Completed at**: $(date)" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "#### Next Steps" >> $GITHUB_STEP_SUMMARY
+        echo "1. Check the uploaded log artifact for details" >> $GITHUB_STEP_SUMMARY
+        echo "2. Verify data in Supabase database" >> $GITHUB_STEP_SUMMARY
+        echo "3. Run the next month's collection if needed" >> $GITHUB_STEP_SUMMARY
