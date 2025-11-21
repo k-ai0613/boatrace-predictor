@@ -21,6 +21,18 @@ on:
         description: 'リクエスト間隔（秒、デフォルト: 2.0）'
         required: false
         default: '2.0'
+      limit:
+        description: '選手数制限（テスト用、空欄=全選手）'
+        required: false
+        default: ''
+      venue_limit:
+        description: '会場数制限（テスト用、空欄=全24会場）'
+        required: false
+        default: ''
+      racer_ids:
+        description: '特定選手ID（カンマ区切り、例: 4001,4002,4003）'
+        required: false
+        default: ''
 
 jobs:
   collect-stats:
@@ -45,9 +57,25 @@ jobs:
       env:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
       run: |
-        python -u scraper/boatrace_db_scraper.py \
+        CMD="python -u scraper/boatrace_db_scraper.py \
           --mode ${{ github.event.inputs.mode || 'all' }} \
-          --delay ${{ github.event.inputs.delay || '2.0' }}
+          --delay ${{ github.event.inputs.delay || '2.0' }}"
+
+        # テスト用オプションを追加（空欄でない場合のみ）
+        if [ -n "${{ github.event.inputs.limit }}" ]; then
+          CMD="$CMD --limit ${{ github.event.inputs.limit }}"
+        fi
+
+        if [ -n "${{ github.event.inputs.venue_limit }}" ]; then
+          CMD="$CMD --venue-limit ${{ github.event.inputs.venue_limit }}"
+        fi
+
+        if [ -n "${{ github.event.inputs.racer_ids }}" ]; then
+          CMD="$CMD --racer-ids \"${{ github.event.inputs.racer_ids }}\""
+        fi
+
+        echo "Running: $CMD"
+        eval $CMD
 
     - name: Summary
       if: always()
@@ -56,6 +84,21 @@ jobs:
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "- **Mode**: ${{ github.event.inputs.mode || 'all' }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Request delay**: ${{ github.event.inputs.delay || '2.0' }}s" >> $GITHUB_STEP_SUMMARY
+
+        # テストモード情報
+        if [ -n "${{ github.event.inputs.limit }}" ] || [ -n "${{ github.event.inputs.venue_limit }}" ] || [ -n "${{ github.event.inputs.racer_ids }}" ]; then
+          echo "- **⚠️ TEST MODE**" >> $GITHUB_STEP_SUMMARY
+          if [ -n "${{ github.event.inputs.limit }}" ]; then
+            echo "  - Racer limit: ${{ github.event.inputs.limit }}" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ -n "${{ github.event.inputs.venue_limit }}" ]; then
+            echo "  - Venue limit: ${{ github.event.inputs.venue_limit }}" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ -n "${{ github.event.inputs.racer_ids }}" ]; then
+            echo "  - Specific racers: ${{ github.event.inputs.racer_ids }}" >> $GITHUB_STEP_SUMMARY
+          fi
+        fi
+
         echo "- **Completed at**: $(date)" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "#### Schedule" >> $GITHUB_STEP_SUMMARY
