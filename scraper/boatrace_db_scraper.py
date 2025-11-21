@@ -524,11 +524,29 @@ class BoatraceDBScraper:
             print(f"Database error: {e}")
             return False
 
-    def collect_all_racer_stats(self):
-        """登録済み全選手の詳細統計を収集"""
-        racers = self.get_registered_racers()
+    def collect_all_racer_stats(self, limit=None, racer_ids=None):
+        """
+        登録済み選手の詳細統計を収集
 
-        print(f"\n=== Starting racer stats collection ===")
+        Args:
+            limit: 収集する選手数の上限（Noneの場合は全選手）
+            racer_ids: 収集する選手番号のリスト（Noneの場合はDBから取得）
+        """
+        # 特定の選手IDが指定されている場合
+        if racer_ids:
+            racers = racer_ids
+            print(f"\n=== Starting racer stats collection (specific IDs) ===")
+            print(f"Racer IDs: {racer_ids}")
+        else:
+            racers = self.get_registered_racers()
+            print(f"\n=== Starting racer stats collection ===")
+            print(f"Total racers in database: {len(racers)}")
+
+        # 数を制限
+        if limit and limit < len(racers):
+            racers = racers[:limit]
+            print(f"Limiting to first {limit} racers")
+
         print(f"Total racers to collect: {len(racers)}\n")
 
         success_count = 0
@@ -552,8 +570,13 @@ class BoatraceDBScraper:
         print(f"Failed: {failed_count}")
         print(f"Total: {len(racers)}")
 
-    def collect_venue_stats(self):
-        """全24会場の詳細統計を収集"""
+    def collect_venue_stats(self, limit=None):
+        """
+        全24会場の詳細統計を収集
+
+        Args:
+            limit: 収集する会場数の上限（Noneの場合は全24会場）
+        """
         print("\n=== Venue stats collection ===")
 
         venues = {
@@ -563,11 +586,18 @@ class BoatraceDBScraper:
             19: '下関', 20: '若松', 21: '芦屋', 22: '福岡', 23: '唐津', 24: '大村'
         }
 
+        # 数を制限
+        if limit:
+            venues = dict(list(venues.items())[:limit])
+            print(f"Limiting to first {limit} venues")
+
+        print(f"Total venues to collect: {len(venues)}\n")
+
         success_count = 0
         failed_count = 0
 
         for venue_id, venue_name in venues.items():
-            print(f"[{venue_id}/24] Processing venue: {venue_name}")
+            print(f"[{venue_id}/{len(venues)}] Processing venue: {venue_name}")
 
             # 会場詳細データをスクレイピング
             venue_data = self.fetch_venue_detail(venue_id, venue_name)
@@ -865,18 +895,31 @@ def main():
     parser.add_argument('--delay', type=float, default=2.0,
                         help='Request delay in seconds (default: 2.0)')
 
+    # テスト用オプション
+    parser.add_argument('--limit', type=int, default=None,
+                        help='Limit number of racers to collect (for testing)')
+    parser.add_argument('--venue-limit', type=int, default=None,
+                        help='Limit number of venues to collect (for testing)')
+    parser.add_argument('--racer-ids', type=str, default=None,
+                        help='Comma-separated racer IDs to collect (e.g., "4001,4002,4003")')
+
     args = parser.parse_args()
 
     scraper = BoatraceDBScraper(delay=args.delay)
 
     try:
+        # 特定の選手IDが指定されている場合
+        racer_ids = None
+        if args.racer_ids:
+            racer_ids = [int(x.strip()) for x in args.racer_ids.split(',')]
+
         if args.mode == 'racers':
-            scraper.collect_all_racer_stats()
+            scraper.collect_all_racer_stats(limit=args.limit, racer_ids=racer_ids)
         elif args.mode == 'venues':
-            scraper.collect_venue_stats()
+            scraper.collect_venue_stats(limit=args.venue_limit)
         elif args.mode == 'all':
-            scraper.collect_all_racer_stats()
-            scraper.collect_venue_stats()
+            scraper.collect_all_racer_stats(limit=args.limit, racer_ids=racer_ids)
+            scraper.collect_venue_stats(limit=args.venue_limit)
 
     finally:
         scraper.close()
