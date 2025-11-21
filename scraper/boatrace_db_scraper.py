@@ -149,6 +149,8 @@ class BoatraceDBScraper:
                 'overall_1st_rate': 0.0,
                 'overall_2nd_rate': 0.0,
                 'overall_3rd_rate': 0.0,
+                'total_優出': 0,
+                'total_優勝': 0,
                 'avg_start_timing': 0.0,
                 'grade_stats': {},
                 'boat_number_stats': {},
@@ -164,6 +166,9 @@ class BoatraceDBScraper:
 
             # 通算成績を抽出
             racer_data = self._parse_racer_overall_stats(soup, racer_data)
+
+            # グレード別着順（フライング・出遅れ）を抽出
+            racer_data = self._parse_racer_grade_order_stats(soup, racer_data)
 
             # 艇番別成績を抽出
             racer_data = self._parse_boat_number_stats(soup, racer_data)
@@ -228,12 +233,13 @@ class BoatraceDBScraper:
                     headers = [th.get_text().strip() for th in header_row.find_all(['th', 'td'])]
 
                 # グレード別成績テーブルを特定（テーブル1）
-                if ('グレード' in headers and '出場節数' in headers and '平均ST' in headers):
+                # ヘッダー: グレード、出場節数、出走数、1着数、勝率、1着率、2連対率、3連対率、優出、優勝、平均ST
+                if ('グレード' in headers and '出場節数' in headers and '優出' in headers and '平均ST' in headers):
                     rows = table.find_all('tr')[1:]  # ヘッダー行をスキップ
 
                     for row in rows:
                         cells = row.find_all(['td', 'th'])
-                        if len(cells) >= 8:
+                        if len(cells) >= 11:
                             grade = cells[0].get_text().strip()
                             try:
                                 races = self._parse_number(cells[2].get_text().strip())
@@ -242,6 +248,9 @@ class BoatraceDBScraper:
                                 rate_1st = self._parse_float(cells[5].get_text().strip())
                                 rate_2nd = self._parse_float(cells[6].get_text().strip())
                                 rate_3rd = self._parse_float(cells[7].get_text().strip())
+                                yusyutsu = self._parse_number(cells[8].get_text().strip())
+                                yusho = self._parse_number(cells[9].get_text().strip())
+                                avg_st = self._parse_float(cells[10].get_text().strip())
 
                                 grade_stats[grade] = {
                                     'races': races,
@@ -249,17 +258,28 @@ class BoatraceDBScraper:
                                     'win_rate': win_rate,
                                     '1st_rate': rate_1st,
                                     '2nd_rate': rate_2nd,
-                                    '3rd_rate': rate_3rd
+                                    '3rd_rate': rate_3rd,
+                                    'yusyutsu': yusyutsu,
+                                    'yusho': yusho,
+                                    'avg_st': avg_st
                                 }
 
-                                # 「一般」または「総合」グレードの成績を全体統計として使用
-                                if grade in ['一般', '総合']:
+                                # 「総合」グレードの成績を全体統計として使用
+                                if grade == '総合':
                                     racer_data['total_races'] = races
                                     racer_data['total_wins'] = wins
                                     racer_data['overall_win_rate'] = win_rate
                                     racer_data['overall_1st_rate'] = rate_1st
                                     racer_data['overall_2nd_rate'] = rate_2nd
                                     racer_data['overall_3rd_rate'] = rate_3rd
+                                    racer_data['total_優出'] = yusyutsu
+                                    racer_data['total_優勝'] = yusho
+                                    racer_data['avg_start_timing'] = avg_st
+
+                                # SG出場回数を取得
+                                if grade == 'SG':
+                                    sg_nodes = self._parse_number(cells[1].get_text().strip())  # 出場節数
+                                    racer_data['sg_appearances'] = sg_nodes
 
                             except (ValueError, IndexError) as e:
                                 continue
@@ -269,6 +289,45 @@ class BoatraceDBScraper:
 
         except Exception as e:
             print(f"  Error parsing overall stats: {e}")
+
+        return racer_data
+
+    def _parse_racer_grade_order_stats(self, soup, racer_data):
+        """グレード別着順（フライング・出遅れ）を抽出"""
+        try:
+            tables = soup.find_all('table')
+
+            for i, table in enumerate(tables):
+                headers = []
+                header_row = table.find('tr')
+                if header_row:
+                    headers = [th.get_text().strip() for th in header_row.find_all(['th', 'td'])]
+
+                # グレード別着順テーブルを特定（テーブル2）
+                # ヘッダー: グレード、出走数、1着、2着、3着、4着、5着、6着、S0、S1、S2、F、L0、L1、K0、K1
+                if ('グレード' in headers and 'F' in headers and 'L0' in headers):
+                    rows = table.find_all('tr')[1:]  # ヘッダー行をスキップ
+
+                    for row in rows:
+                        cells = row.find_all(['td', 'th'])
+                        if len(cells) >= 13:
+                            grade = cells[0].get_text().strip()
+
+                            # 「総合」行からフライング・出遅れを取得
+                            if grade == '総合':
+                                try:
+                                    flying = self._parse_number(cells[11].get_text().strip())  # F列
+                                    late_start = self._parse_number(cells[12].get_text().strip())  # L0列
+
+                                    racer_data['flying_count'] = flying
+                                    racer_data['late_start_count'] = late_start
+                                except (ValueError, IndexError):
+                                    continue
+
+                    break  # 最初に見つかったテーブルで処理終了
+
+        except Exception as e:
+            print(f"  Error parsing grade order stats: {e}")
 
         return racer_data
 
@@ -415,7 +474,7 @@ class BoatraceDBScraper:
         return racer_data
 
     def _parse_venue_stats(self, soup, racer_data):
-        """場別成績を抽出"""
+        """場別成績を抽出（Table 7）"""
         try:
             tables = soup.find_all('table')
             venue_stats = {}
@@ -426,23 +485,38 @@ class BoatraceDBScraper:
                 if header_row:
                     headers = [th.get_text().strip() for th in header_row.find_all(['th', 'td'])]
 
-                # 場別成績テーブルを特定（24会場）
-                if '場' in ''.join(headers) and '出場節数' in ''.join(headers):
+                # 場別成績テーブルを特定（テーブル7）
+                # ヘッダー: 場、出場節数、出走数、1着数、勝率、1着率、2連対率、3連対率、優出、優勝、平均ST
+                if ('場' in headers and '出場節数' in headers and '優出' in headers and '平均ST' in headers):
                     rows = table.find_all('tr')[1:]
 
                     for row in rows:
                         cells = row.find_all(['td', 'th'])
-                        if len(cells) >= 9:
+                        if len(cells) >= 11:
                             venue_name = cells[0].get_text().strip()
                             try:
-                                races = int(cells[2].get_text().strip()) if cells[2].get_text().strip().isdigit() else 0
-                                rate_1st = float(cells[5].get_text().strip()) if cells[5].get_text().strip() else 0.0
-                                rate_2nd = float(cells[6].get_text().strip()) if cells[6].get_text().strip() else 0.0
+                                nodes = self._parse_number(cells[1].get_text().strip())  # 出場節数
+                                races = self._parse_number(cells[2].get_text().strip())
+                                wins = self._parse_number(cells[3].get_text().strip())
+                                win_rate = self._parse_float(cells[4].get_text().strip())
+                                rate_1st = self._parse_float(cells[5].get_text().strip())
+                                rate_2nd = self._parse_float(cells[6].get_text().strip())
+                                rate_3rd = self._parse_float(cells[7].get_text().strip())
+                                yusyutsu = self._parse_number(cells[8].get_text().strip())
+                                yusho = self._parse_number(cells[9].get_text().strip())
+                                avg_st = self._parse_float(cells[10].get_text().strip())
 
                                 venue_stats[venue_name] = {
+                                    'nodes': nodes,
                                     'races': races,
+                                    'wins': wins,
+                                    'win_rate': win_rate,
                                     '1st_rate': rate_1st,
-                                    '2nd_rate': rate_2nd
+                                    '2nd_rate': rate_2nd,
+                                    '3rd_rate': rate_3rd,
+                                    'yusyutsu': yusyutsu,
+                                    'yusho': yusho,
+                                    'avg_st': avg_st
                                 }
                             except (ValueError, IndexError):
                                 continue
@@ -473,11 +547,11 @@ class BoatraceDBScraper:
                     racer_number, registration_period, branch,
                     total_races, total_wins, overall_win_rate,
                     overall_1st_rate, overall_2nd_rate, overall_3rd_rate,
-                    avg_start_timing,
+                    total_優出, total_優勝, avg_start_timing,
                     grade_stats, boat_number_stats, course_stats, venue_stats,
                     sg_appearances, flying_count, late_start_count
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (racer_number) DO UPDATE SET
                     registration_period = EXCLUDED.registration_period,
                     branch = EXCLUDED.branch,
@@ -487,6 +561,8 @@ class BoatraceDBScraper:
                     overall_1st_rate = EXCLUDED.overall_1st_rate,
                     overall_2nd_rate = EXCLUDED.overall_2nd_rate,
                     overall_3rd_rate = EXCLUDED.overall_3rd_rate,
+                    total_優出 = EXCLUDED.total_優出,
+                    total_優勝 = EXCLUDED.total_優勝,
                     avg_start_timing = EXCLUDED.avg_start_timing,
                     grade_stats = EXCLUDED.grade_stats,
                     boat_number_stats = EXCLUDED.boat_number_stats,
@@ -506,6 +582,8 @@ class BoatraceDBScraper:
                 racer_data.get('overall_1st_rate', 0.0),
                 racer_data.get('overall_2nd_rate', 0.0),
                 racer_data.get('overall_3rd_rate', 0.0),
+                racer_data.get('total_優出', 0),
+                racer_data.get('total_優勝', 0),
                 racer_data.get('avg_start_timing', 0.0),
                 json.dumps(racer_data.get('grade_stats', {})),
                 json.dumps(racer_data.get('boat_number_stats', {})),
