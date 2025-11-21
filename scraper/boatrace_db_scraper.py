@@ -29,7 +29,12 @@ class BoatraceDBScraper:
         self.db_conn = psycopg2.connect(os.getenv('DATABASE_URL'))
         self.session = requests.Session()
         self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'ja,en-US;q=0.9,en;q=0.8',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1'
         })
 
     def close(self):
@@ -37,14 +42,14 @@ class BoatraceDBScraper:
         if self.db_conn:
             self.db_conn.close()
 
-    def _fetch_with_retry(self, url, max_retries=3, timeout=30):
+    def _fetch_with_retry(self, url, max_retries=5, timeout=60):
         """
-        リトライ機能付きHTTPリクエスト
+        リトライ機能付きHTTPリクエスト（指数バックオフ実装）
 
         Args:
             url: リクエストURL
-            max_retries: 最大リトライ回数（デフォルト: 3）
-            timeout: タイムアウト秒数（デフォルト: 30）
+            max_retries: 最大リトライ回数（デフォルト: 5）
+            timeout: タイムアウト秒数（デフォルト: 60）
 
         Returns:
             requests.Response: レスポンスオブジェクト、失敗時はNone
@@ -58,22 +63,34 @@ class BoatraceDBScraper:
                 elif response.status_code == 404:
                     print(f"  404 Not Found: {url}")
                     return None
+                elif response.status_code == 429:
+                    # レート制限エラー - 長めに待つ
+                    wait_time = min(30, self.delay * (2 ** attempt))  # 最大30秒
+                    print(f"  Rate limit (429), waiting {wait_time:.1f}s... ({attempt + 1}/{max_retries})")
+                    time.sleep(wait_time)
+                    continue
                 elif response.status_code >= 500:
-                    print(f"  Server error {response.status_code}, retrying... ({attempt + 1}/{max_retries})")
-                    time.sleep(self.delay * 2)  # サーバーエラー時は長めに待つ
+                    # サーバーエラー - 指数バックオフ
+                    wait_time = min(20, self.delay * (2 ** attempt))  # 最大20秒
+                    print(f"  Server error {response.status_code}, waiting {wait_time:.1f}s... ({attempt + 1}/{max_retries})")
+                    time.sleep(wait_time)
                     continue
                 else:
                     print(f"  HTTP {response.status_code}: {url}")
                     return None
 
             except requests.exceptions.Timeout:
-                print(f"  Timeout error, retrying... ({attempt + 1}/{max_retries})")
-                time.sleep(self.delay)
+                # タイムアウトエラー - 長めの指数バックオフ
+                wait_time = min(30, 5 + self.delay * (2 ** attempt))  # 基礎5秒 + 指数バックオフ、最大30秒
+                print(f"  Timeout error, waiting {wait_time:.1f}s... ({attempt + 1}/{max_retries})")
+                time.sleep(wait_time)
                 continue
 
             except requests.exceptions.ConnectionError as e:
-                print(f"  Connection error: {e}, retrying... ({attempt + 1}/{max_retries})")
-                time.sleep(self.delay * 2)
+                # 接続エラー - 指数バックオフ
+                wait_time = min(25, self.delay * (2 ** attempt))  # 最大25秒
+                print(f"  Connection error, waiting {wait_time:.1f}s... ({attempt + 1}/{max_retries})")
+                time.sleep(wait_time)
                 continue
 
             except Exception as e:
@@ -113,7 +130,7 @@ class BoatraceDBScraper:
 
         try:
             print(f"Fetching racer {racer_number}: {url}")
-            response = self._fetch_with_retry(url, max_retries=3, timeout=30)
+            response = self._fetch_with_retry(url)  # デフォルト: max_retries=5, timeout=60
 
             if not response:
                 print(f"  Failed to fetch racer {racer_number}")
@@ -582,7 +599,7 @@ class BoatraceDBScraper:
 
         try:
             print(f"Fetching venue {venue_id} ({venue_name}): {url}")
-            response = self._fetch_with_retry(url, max_retries=3, timeout=30)
+            response = self._fetch_with_retry(url)  # デフォルト: max_retries=5, timeout=60
 
             if not response:
                 print(f"  Failed to fetch venue {venue_id}")
