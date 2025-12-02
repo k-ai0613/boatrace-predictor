@@ -48,8 +48,8 @@ def get_next_backfill_month(force_month=None):
         # 最古のデータの前月を収集対象とする
         target_date = oldest_date - relativedelta(months=1)
 
-        # 2022年1月より古い場合は終了
-        if target_date.year < 2022:
+        # 2020年1月より古い場合は終了
+        if target_date.year < 2020:
             return None
 
         return target_date.strftime('%Y-%m')
