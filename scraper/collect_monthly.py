@@ -63,8 +63,8 @@ def main():
     parser.add_argument(
         '--delay',
         type=float,
-        default=2.0,
-        help='Request delay in seconds (default: 2.0)'
+        default=5.0,
+        help='Request delay in seconds (default: 5.0)'
     )
     parser.add_argument(
         '--max-retries',

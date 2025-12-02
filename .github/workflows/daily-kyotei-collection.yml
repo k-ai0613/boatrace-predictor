@@ -62,7 +62,7 @@ jobs:
           --end-date ${{ steps.date.outputs.target }} \
           --venues ${{ github.event.inputs.venues || '24' }} \
           --races ${{ github.event.inputs.races || '12' }} \
-          --delay 2.0 \
+          --delay 5.0 \
           --max-retries 3
 
     - name: Upload collection log

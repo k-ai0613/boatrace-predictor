@@ -1,9 +1,9 @@
 name: Collect Detailed Statistics
 
 on:
-  # 月1回の自動実行（毎月1日の深夜3時JST = 18:00 UTC）
+  # 月1回の自動実行（毎月1日の深夜4時JST = 19:00 UTC）
   schedule:
-    - cron: '0 18 1 * *'
+    - cron: '0 19 1 * *'
 
   # 手動実行も可能
   workflow_dispatch:
@@ -18,9 +18,9 @@ on:
           - venues
           - all
       delay:
-        description: 'リクエスト間隔（秒、デフォルト: 2.0）'
+        description: 'リクエスト間隔（秒、デフォルト: 5.0）'
         required: false
-        default: '2.0'
+        default: '5.0'
       limit:
         description: '選手数制限（テスト用、空欄=全選手）'
         required: false
@@ -102,7 +102,7 @@ jobs:
         echo "- **Completed at**: $(date)" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "#### Schedule" >> $GITHUB_STEP_SUMMARY
-        echo "- **Monthly**: 1st day of month at 03:00 JST (18:00 UTC)" >> $GITHUB_STEP_SUMMARY
+        echo "- **Monthly**: 1st day of month at 04:00 JST (19:00 UTC)" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "#### Data Collected" >> $GITHUB_STEP_SUMMARY
         echo "- Racer detailed stats (profile, overall stats, boat/course/venue stats)" >> $GITHUB_STEP_SUMMARY

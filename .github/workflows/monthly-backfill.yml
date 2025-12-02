@@ -16,9 +16,9 @@ on:
         required: false
         default: '12'
       delay:
-        description: 'リクエスト間隔（秒、デフォルト: 2.0）'
+        description: 'リクエスト間隔（秒、デフォルト: 5.0）'
         required: false
-        default: '2.0'
+        default: '5.0'
 
 jobs:
   collect-monthly-data:
