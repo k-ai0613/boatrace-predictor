@@ -1,0 +1,98 @@
+name: Auto Monthly Backfill
+
+on:
+  # 毎日深夜3時（JST = UTC+9 → 18:00 UTC）に自動実行
+  schedule:
+    - cron: '0 18 * * *'
+
+  # 手動実行も可能
+  workflow_dispatch:
+    inputs:
+      force_month:
+        description: '強制的に収集する月（YYYY-MM形式、空欄で自動判定）'
+        required: false
+        default: ''
+
+jobs:
+  auto-backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360  # 6時間
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        pip install -r scraper/requirements.txt
+        pip install python-dateutil
+
+    - name: Determine target month
+      id: month
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      run: |
+        # 次に収集すべき月を取得
+        FORCE_MONTH="${{ github.event.inputs.force_month }}"
+        if [ -n "$FORCE_MONTH" ]; then
+          TARGET_MONTH=$(python scraper/get_next_backfill_month.py --force-month "$FORCE_MONTH")
+        else
+          TARGET_MONTH=$(python scraper/get_next_backfill_month.py)
+        fi
+
+        # 終了コードをチェック
+        if [ $? -eq 0 ]; then
+          echo "target=$TARGET_MONTH" >> $GITHUB_OUTPUT
+          echo "収集対象月: $TARGET_MONTH"
+        else
+          echo "skip=true" >> $GITHUB_OUTPUT
+          echo "バックフィル完了: 2022年までのデータ収集が完了しました"
+        fi
+
+    - name: Collect monthly data
+      if: steps.month.outputs.skip != 'true'
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      run: |
+        python -u scraper/collect_monthly.py \
+          --year-month ${{ steps.month.outputs.target }} \
+          --venues 24 \
+          --races 12 \
+          --delay 5.0 \
+          --max-retries 3
+
+    - name: Upload collection log
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: auto-backfill-log-${{ steps.month.outputs.target || 'skipped' }}
+        path: scraper/*.txt
+        retention-days: 90
+
+    - name: Summary
+      if: always()
+      run: |
+        echo "### Auto Monthly Backfill Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+
+        if [ "${{ steps.month.outputs.skip }}" = "true" ]; then
+          echo "✅ **Status**: Backfill completed (reached 2022-01)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "All historical data has been collected!" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "- **Target month**: ${{ steps.month.outputs.target }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Venues**: 24" >> $GITHUB_STEP_SUMMARY
+          echo "- **Races per venue**: 12" >> $GITHUB_STEP_SUMMARY
+          echo "- **Request delay**: 5.0s" >> $GITHUB_STEP_SUMMARY
+          echo "- **Completed at**: $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "#### Next Execution" >> $GITHUB_STEP_SUMMARY
+          echo "- Tomorrow at 03:00 JST (18:00 UTC)" >> $GITHUB_STEP_SUMMARY
+          echo "- Will collect the next older month automatically" >> $GITHUB_STEP_SUMMARY
+        fi
