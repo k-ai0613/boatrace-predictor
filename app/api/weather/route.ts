@@ -1,8 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { supabase, isSupabaseAvailable } from '@/lib/supabase'
 
 export async function GET(request: NextRequest) {
   try {
+    if (!isSupabaseAvailable()) {
+      return NextResponse.json(
+        { error: 'データベース接続が設定されていません' },
+        { status: 503 }
+      )
+    }
+
     const searchParams = request.nextUrl.searchParams
     const venueId = searchParams.get('venue_id')
     const date = searchParams.get('date')
@@ -57,6 +64,13 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    if (!isSupabaseAvailable()) {
+      return NextResponse.json(
+        { error: 'データベース接続が設定されていません' },
+        { status: 503 }
+      )
+    }
+
     const weatherData = await request.json()
 
     const { data, error } = await supabase

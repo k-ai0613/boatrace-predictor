@@ -1,8 +1,16 @@
-import { supabase } from './supabase'
+import { supabase, isSupabaseAvailable } from './supabase'
 import { Racer, RacerStats, Race, RaceEntry, Prediction } from '@/types'
+
+// Supabaseが利用不可の場合のエラー
+function checkSupabase() {
+  if (!isSupabaseAvailable()) {
+    throw new Error('データベース接続が設定されていません')
+  }
+}
 
 // 選手データの取得
 export async function getRacers(limit: number = 50) {
+  checkSupabase()
   const { data, error } = await supabase
     .from('racers')
     .select('*')
@@ -15,6 +23,7 @@ export async function getRacers(limit: number = 50) {
 
 // 選手成績データの取得
 export async function getRacerStats(racerId?: number) {
+  checkSupabase()
   let query = supabase
     .from('racer_stats')
     .select('*, racers!racer_id(*)')
@@ -32,6 +41,7 @@ export async function getRacerStats(racerId?: number) {
 
 // レースデータの取得
 export async function getRecentRaces(limit: number = 20) {
+  checkSupabase()
   const { data, error } = await supabase
     .from('races')
     .select(`
@@ -50,6 +60,7 @@ export async function getRecentRaces(limit: number = 20) {
 
 // 予測データの取得
 export async function getPredictionsByRaceId(raceId: number) {
+  checkSupabase()
   const { data, error } = await supabase
     .from('predictions')
     .select('*')
@@ -62,6 +73,7 @@ export async function getPredictionsByRaceId(raceId: number) {
 
 // コース別成績の集計
 export async function getCourseStatistics() {
+  checkSupabase()
   const { data, error } = await supabase
     .from('race_entries')
     .select('course, result_position')
@@ -97,6 +109,7 @@ export async function getCourseStatistics() {
 
 // 艇別成績の集計
 export async function getBoatStatistics() {
+  checkSupabase()
   const { data, error } = await supabase
     .from('race_entries')
     .select('boat_number, result_position')
@@ -138,6 +151,7 @@ export async function getBoatStatistics() {
 
 // トップ選手の取得
 export async function getTopRacers(limit: number = 10) {
+  checkSupabase()
   const { data, error } = await supabase
     .from('racer_stats')
     .select('*, racers!racer_id(*)')

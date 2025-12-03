@@ -1,8 +1,16 @@
-import { supabase } from './supabase'
+import { supabase, isSupabaseAvailable } from './supabase'
 import { Race, RaceEntry, Racer, WeatherData, Prediction } from '@/types'
+
+// Supabaseが利用不可の場合のエラー
+function checkSupabase() {
+  if (!isSupabaseAvailable()) {
+    throw new Error('データベース接続が設定されていません')
+  }
+}
 
 // 未来のレース取得
 export async function getUpcomingRaces(venueId?: number, date?: string) {
+  checkSupabase()
   let query = supabase
     .from('races')
     .select(`
@@ -41,6 +49,7 @@ export async function getUpcomingRaces(venueId?: number, date?: string) {
 
 // 特定のレース取得
 export async function getRaceById(raceId: number) {
+  checkSupabase()
   const { data, error } = await supabase
     .from('races')
     .select(`
@@ -59,6 +68,7 @@ export async function getRaceById(raceId: number) {
 
 // 開催場と日付からレース取得
 export async function getRacesByVenueAndDate(venueId: number, date: string, raceNumber?: number) {
+  checkSupabase()
   let query = supabase
     .from('races')
     .select(`
@@ -89,6 +99,7 @@ export async function getRacesByVenueAndDate(venueId: number, date: string, race
 
 // 天候データ取得
 export async function getWeatherData(venueId: number, date?: string) {
+  checkSupabase()
   let query = supabase
     .from('weather_data')
     .select('*')

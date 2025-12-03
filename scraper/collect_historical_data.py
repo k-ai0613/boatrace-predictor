@@ -20,19 +20,33 @@ import sys
 from kyotei24_scraper import Kyotei24Scraper
 
 
-def collect_data(start_date, end_date, max_venues=24, max_races=12, delay=1.0, max_retries=3):
+def collect_data(start_date, end_date, max_venues=24, max_races=12, delay=1.0, max_retries=3, start_venue=1, end_venue=None):
     """
     指定期間のデータを収集
 
     Args:
         start_date: 開始日（datetime）
         end_date: 終了日（datetime）
-        max_venues: 収集する会場数（1-24）
+        max_venues: 収集する会場数（1-24）※後方互換性のために残す
         max_races: 1会場あたりのレース数（1-12）
         delay: リクエスト間隔（秒）
         max_retries: 最大再試行回数
+        start_venue: 開始会場番号（1-24、デフォルト: 1）
+        end_venue: 終了会場番号（1-24、デフォルト: max_venues）
     """
     scraper = Kyotei24Scraper()
+
+    # end_venueが指定されていない場合はmax_venuesを使用
+    if end_venue is None:
+        end_venue = max_venues
+
+    # バリデーション
+    start_venue = max(1, min(24, start_venue))
+    end_venue = max(1, min(24, end_venue))
+    if start_venue > end_venue:
+        start_venue, end_venue = end_venue, start_venue
+
+    venue_count = end_venue - start_venue + 1
 
     # 統計情報
     stats = {
@@ -49,10 +63,10 @@ def collect_data(start_date, end_date, max_venues=24, max_races=12, delay=1.0, m
     print(f"=== Historical Data Collection Started ===")
     print(f"Period: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
     print(f"Total days: {total_days}")
-    print(f"Venues: 1-{max_venues}")
+    print(f"Venues: {start_venue}-{end_venue} ({venue_count} venues)")
     print(f"Races per venue: 1-{max_races}")
     print(f"Request delay: {delay}s")
-    print(f"Estimated total races: {total_days * max_venues * max_races}")
+    print(f"Estimated total races: {total_days * venue_count * max_races}")
     print()
 
     try:
@@ -66,7 +80,7 @@ def collect_data(start_date, end_date, max_venues=24, max_races=12, delay=1.0, m
             day_success = 0
             day_failed = 0
 
-            for venue_id in range(1, max_venues + 1):
+            for venue_id in range(start_venue, end_venue + 1):
                 venue_success = 0
 
                 for race_number in range(1, max_races + 1):

@@ -1,0 +1,16 @@
+{
+  "timestamp": "20251203_221321",
+  "best_score": 0.3334790631017731,
+  "best_params": {
+    "colsample_bytree": 0.8798048843068775,
+    "gamma": 0.06917654620890068,
+    "learning_rate": 0.035221630226164265,
+    "max_depth": 4,
+    "min_child_weight": 3,
+    "n_estimators": 244,
+    "reg_alpha": 0.39882090144479454,
+    "reg_lambda": 0.8670414751614841,
+    "subsample": 0.8976170571996461
+  },
+  "note": "RandomizedSearchCV with StratifiedKFold CV"
+}

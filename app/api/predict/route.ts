@@ -14,6 +14,13 @@ export async function POST(request: NextRequest) {
 
     const supabase = createServerClient()
 
+    if (!supabase) {
+      return NextResponse.json(
+        { error: 'データベース接続が設定されていません' },
+        { status: 503 }
+      )
+    }
+
     // 1. レースエントリーデータ取得
     const { data: entries, error: entriesError } = await supabase
       .from('race_entries')

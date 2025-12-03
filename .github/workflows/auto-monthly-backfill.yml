@@ -1,9 +1,11 @@
 name: Auto Monthly Backfill
 
 on:
-  # 毎日深夜3時（JST = UTC+9 → 18:00 UTC）に自動実行
+  # Part 1: 毎日深夜3時（JST = UTC+9 → 18:00 UTC）に会場1-12を収集
+  # Part 2: 毎日午前9時（JST = UTC+9 → 00:00 UTC）に会場13-24を収集
   schedule:
-    - cron: '0 18 * * *'
+    - cron: '0 18 * * *'  # Part 1: 18:00 UTC (3:00 JST)
+    - cron: '0 0 * * *'   # Part 2: 00:00 UTC (9:00 JST)
 
   # 手動実行も可能
   workflow_dispatch:
@@ -12,11 +14,20 @@ on:
         description: '強制的に収集する月（YYYY-MM形式、空欄で自動判定）'
         required: false
         default: ''
+      venue_part:
+        description: '収集する会場パート（1=会場1-12, 2=会場13-24, 空欄=両方）'
+        required: false
+        default: ''
 
 jobs:
-  auto-backfill:
+  # Part 1: 会場1-12を収集
+  backfill-part1:
     runs-on: ubuntu-latest
-    timeout-minutes: 840  # 14時間
+    timeout-minutes: 300  # 5時間（GitHub Free tierの6時間制限内）
+    # schedule[0] (18:00 UTC) または手動実行でpart=1か空欄の場合
+    if: |
+      github.event_name == 'workflow_dispatch' && (github.event.inputs.venue_part == '1' || github.event.inputs.venue_part == '') ||
+      github.event_name == 'schedule' && github.event.schedule == '0 18 * * *'
 
     steps:
     - name: Checkout code
@@ -38,7 +49,6 @@ jobs:
       env:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
       run: |
-        # 次に収集すべき月を取得
         FORCE_MONTH="${{ github.event.inputs.force_month }}"
         if [ -n "$FORCE_MONTH" ]; then
           TARGET_MONTH=$(python scraper/get_next_backfill_month.py --force-month "$FORCE_MONTH")
@@ -46,23 +56,24 @@ jobs:
           TARGET_MONTH=$(python scraper/get_next_backfill_month.py)
         fi
 
-        # 終了コードをチェック
         if [ $? -eq 0 ]; then
           echo "target=$TARGET_MONTH" >> $GITHUB_OUTPUT
-          echo "収集対象月: $TARGET_MONTH"
+          echo "収集対象月: $TARGET_MONTH (会場1-12)"
         else
           echo "skip=true" >> $GITHUB_OUTPUT
-          echo "バックフィル完了: 2022年までのデータ収集が完了しました"
+          echo "バックフィル完了: 2020年までのデータ収集が完了しました"
         fi
 
-    - name: Collect monthly data
+    - name: Collect monthly data (Venues 1-12)
       if: steps.month.outputs.skip != 'true'
       env:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
       run: |
+        echo "=== 会場1-12のデータ収集開始 ==="
         python -u scraper/collect_monthly.py \
           --year-month ${{ steps.month.outputs.target }} \
-          --venues 24 \
+          --start-venue 1 \
+          --end-venue 12 \
           --races 12 \
           --delay 5.0 \
           --max-retries 3
@@ -71,28 +82,111 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: auto-backfill-log-${{ steps.month.outputs.target || 'skipped' }}
+        name: backfill-part1-log-${{ steps.month.outputs.target || 'skipped' }}
         path: scraper/*.txt
         retention-days: 90
 
-    - name: Summary
+    - name: Summary Part 1
       if: always()
       run: |
-        echo "### Auto Monthly Backfill Summary" >> $GITHUB_STEP_SUMMARY
+        echo "### Auto Monthly Backfill - Part 1 (Venues 1-12)" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
 
         if [ "${{ steps.month.outputs.skip }}" = "true" ]; then
-          echo "✅ **Status**: Backfill completed (reached 2022-01)" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "All historical data has been collected!" >> $GITHUB_STEP_SUMMARY
+          echo "✅ **Status**: Backfill completed (reached 2020-01)" >> $GITHUB_STEP_SUMMARY
         else
           echo "- **Target month**: ${{ steps.month.outputs.target }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Venues**: 24" >> $GITHUB_STEP_SUMMARY
+          echo "- **Venues**: 1-12" >> $GITHUB_STEP_SUMMARY
           echo "- **Races per venue**: 12" >> $GITHUB_STEP_SUMMARY
           echo "- **Request delay**: 5.0s" >> $GITHUB_STEP_SUMMARY
           echo "- **Completed at**: $(date)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "#### Next Execution" >> $GITHUB_STEP_SUMMARY
-          echo "- Tomorrow at 03:00 JST (18:00 UTC)" >> $GITHUB_STEP_SUMMARY
+          echo "#### Next: Part 2 (Venues 13-24)" >> $GITHUB_STEP_SUMMARY
+          echo "- Runs at 09:00 JST (00:00 UTC)" >> $GITHUB_STEP_SUMMARY
+        fi
+
+  # Part 2: 会場13-24を収集
+  backfill-part2:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300  # 5時間（GitHub Free tierの6時間制限内）
+    # schedule[1] (00:00 UTC) または手動実行でpart=2か空欄の場合
+    if: |
+      github.event_name == 'workflow_dispatch' && (github.event.inputs.venue_part == '2' || github.event.inputs.venue_part == '') ||
+      github.event_name == 'schedule' && github.event.schedule == '0 0 * * *'
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        pip install -r scraper/requirements.txt
+        pip install python-dateutil
+
+    - name: Determine target month
+      id: month
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      run: |
+        FORCE_MONTH="${{ github.event.inputs.force_month }}"
+        if [ -n "$FORCE_MONTH" ]; then
+          TARGET_MONTH=$(python scraper/get_next_backfill_month.py --force-month "$FORCE_MONTH")
+        else
+          TARGET_MONTH=$(python scraper/get_next_backfill_month.py)
+        fi
+
+        if [ $? -eq 0 ]; then
+          echo "target=$TARGET_MONTH" >> $GITHUB_OUTPUT
+          echo "収集対象月: $TARGET_MONTH (会場13-24)"
+        else
+          echo "skip=true" >> $GITHUB_OUTPUT
+          echo "バックフィル完了: 2020年までのデータ収集が完了しました"
+        fi
+
+    - name: Collect monthly data (Venues 13-24)
+      if: steps.month.outputs.skip != 'true'
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      run: |
+        echo "=== 会場13-24のデータ収集開始 ==="
+        python -u scraper/collect_monthly.py \
+          --year-month ${{ steps.month.outputs.target }} \
+          --start-venue 13 \
+          --end-venue 24 \
+          --races 12 \
+          --delay 5.0 \
+          --max-retries 3
+
+    - name: Upload collection log
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: backfill-part2-log-${{ steps.month.outputs.target || 'skipped' }}
+        path: scraper/*.txt
+        retention-days: 90
+
+    - name: Summary Part 2
+      if: always()
+      run: |
+        echo "### Auto Monthly Backfill - Part 2 (Venues 13-24)" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+
+        if [ "${{ steps.month.outputs.skip }}" = "true" ]; then
+          echo "✅ **Status**: Backfill completed (reached 2020-01)" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "- **Target month**: ${{ steps.month.outputs.target }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Venues**: 13-24" >> $GITHUB_STEP_SUMMARY
+          echo "- **Races per venue**: 12" >> $GITHUB_STEP_SUMMARY
+          echo "- **Request delay**: 5.0s" >> $GITHUB_STEP_SUMMARY
+          echo "- **Completed at**: $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "#### Next Cycle" >> $GITHUB_STEP_SUMMARY
+          echo "- Part 1 (Venues 1-12): Tomorrow at 03:00 JST" >> $GITHUB_STEP_SUMMARY
           echo "- Will collect the next older month automatically" >> $GITHUB_STEP_SUMMARY
         fi

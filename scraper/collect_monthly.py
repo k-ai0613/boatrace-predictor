@@ -10,6 +10,8 @@
 例:
   python collect_monthly.py --year-month 2023-06  # 2023年6月分を収集
   python collect_monthly.py --year-month 2024-12  # 2024年12月分を収集
+  python collect_monthly.py --year-month 2024-12 --start-venue 1 --end-venue 12  # 会場1-12のみ
+  python collect_monthly.py --year-month 2024-12 --start-venue 13 --end-venue 24  # 会場13-24のみ
 """
 
 import argparse
@@ -52,7 +54,19 @@ def main():
         '--venues',
         type=int,
         default=24,
-        help='Number of venues (1-24, default: 24)'
+        help='Number of venues (1-24, default: 24) - for backward compatibility'
+    )
+    parser.add_argument(
+        '--start-venue',
+        type=int,
+        default=1,
+        help='Start venue number (1-24, default: 1)'
+    )
+    parser.add_argument(
+        '--end-venue',
+        type=int,
+        default=None,
+        help='End venue number (1-24, default: same as --venues)'
     )
     parser.add_argument(
         '--races',
@@ -75,6 +89,9 @@ def main():
 
     args = parser.parse_args()
 
+    # end_venueが指定されていない場合はvenuesを使用
+    end_venue = args.end_venue if args.end_venue is not None else args.venues
+
     # 年月のバリデーション
     try:
         start_date, end_date = get_month_date_range(args.year_month)
@@ -87,12 +104,18 @@ def main():
         print(f"Error: Cannot collect data for future month '{args.year_month}'")
         return 1
 
+    # 会場範囲のバリデーション
+    start_venue = max(1, min(24, args.start_venue))
+    end_venue = max(1, min(24, end_venue))
+    venue_count = end_venue - start_venue + 1
+
     # データ収集範囲を表示
     print(f"=== Monthly Data Collection ===")
     print(f"Target month: {args.year_month}")
     print(f"Date range: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
     print(f"Total days: {(end_date - start_date).days + 1}")
-    print(f"Estimated races: {(end_date - start_date).days + 1} days × {args.venues} venues × {args.races} races")
+    print(f"Venues: {start_venue}-{end_venue} ({venue_count} venues)")
+    print(f"Estimated races: {(end_date - start_date).days + 1} days × {venue_count} venues × {args.races} races")
     print(f"Request delay: {args.delay}s")
     print()
 
@@ -101,10 +124,12 @@ def main():
         collect_data(
             start_date=start_date,
             end_date=end_date,
-            max_venues=args.venues,
+            max_venues=end_venue,  # 後方互換性のため
             max_races=args.races,
             delay=args.delay,
-            max_retries=args.max_retries
+            max_retries=args.max_retries,
+            start_venue=start_venue,
+            end_venue=end_venue
         )
         return 0
     except KeyboardInterrupt:

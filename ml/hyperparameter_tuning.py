@@ -39,14 +39,20 @@ def calculate_sample_weight(race_dates, half_life_years=3.0):
     Returns:
         numpy.ndarray: サンプル重み（各データポイントの重要度）
     """
-    from datetime import datetime
+    from datetime import datetime, date as date_type
 
-    today = datetime.now()
+    today = datetime.now().date()
     weights = []
 
     for date in race_dates:
         if isinstance(date, str):
-            date = pd.to_datetime(date)
+            date = pd.to_datetime(date).date()
+        elif isinstance(date, pd.Timestamp):
+            date = date.date()
+        elif isinstance(date, datetime):
+            date = date.date()
+        elif not isinstance(date, date_type):
+            date = pd.to_datetime(date).date()
 
         days_ago = (today - date).days
 

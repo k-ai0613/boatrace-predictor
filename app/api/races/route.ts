@@ -10,6 +10,13 @@ export async function GET(request: NextRequest) {
 
     const supabase = createServerClient()
 
+    if (!supabase) {
+      return NextResponse.json(
+        { error: 'データベース接続が設定されていません' },
+        { status: 503 }
+      )
+    }
+
     // レースデータ取得
     let raceQuery = supabase
       .from('races')
