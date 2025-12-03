@@ -16,7 +16,7 @@ on:
 jobs:
   auto-backfill:
     runs-on: ubuntu-latest
-    timeout-minutes: 360  # 6時間
+    timeout-minutes: 840  # 14時間
 
     steps:
     - name: Checkout code
