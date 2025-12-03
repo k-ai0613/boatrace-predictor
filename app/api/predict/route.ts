@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { createServerClient } from '@/lib/supabase'
 
 export async function POST(request: NextRequest) {
   try {
@@ -12,30 +12,47 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 1. レースデータ取得
-    const { data: raceData, error: raceError } = await supabase
-      .from('race_entries')
-      .select(`
-        *,
-        races(*),
-        racers(*)
-      `)
-      .eq('race_id', raceId)
+    const supabase = createServerClient()
 
-    if (raceError) {
-      console.error('Race data fetch error:', raceError)
+    // 1. レースエントリーデータ取得
+    const { data: entries, error: entriesError } = await supabase
+      .from('race_entries')
+      .select('*')
+      .eq('race_id', raceId)
+      .order('boat_number', { ascending: true })
+
+    if (entriesError) {
+      console.error('Race entries fetch error:', entriesError)
       return NextResponse.json(
         { error: 'Failed to fetch race data' },
         { status: 500 }
       )
     }
 
-    if (!raceData || raceData.length === 0) {
+    if (!entries || entries.length === 0) {
       return NextResponse.json(
         { error: 'Race not found' },
         { status: 404 }
       )
     }
+
+    // 選手データを個別に取得
+    const raceData = await Promise.all(
+      entries.map(async (entry) => {
+        const { data: racer, error: racerError } = await supabase
+          .from('racers')
+          .select('*')
+          .eq('id', entry.racer_id)
+          .single()
+
+        if (racerError) {
+          console.error('Racer fetch error:', racerError)
+          return { ...entry, racers: null }
+        }
+
+        return { ...entry, racers: racer }
+      })
+    )
 
     // 2. 既存の予測結果をチェック
     const { data: existingPredictions, error: predError } = await supabase
@@ -71,35 +88,84 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // 3. 新規予測の場合（実際の機械学習モデルが必要）
-    // ここでは簡易的なダミーデータを返す
-    const dummyPredictions = raceData.map(entry => {
-      // 簡易的な確率計算（実際はMLモデルを使用）
-      const baseProb = Math.random() * 0.3
-      const winProb = entry.boat_number === 1 ? 0.4 + baseProb : 0.1 + baseProb * 0.5
+    // 3. 新規予測の場合（Pythonモデルで予測を実行）
+    try {
+      const { execSync } = require('child_process')
+      const pythonCommand = process.platform === 'win32' ? 'python' : 'python3'
 
-      return {
+      // Pythonスクリプトを実行して予測を生成＆DBに保存
+      console.log(`Running Python prediction for race ${raceId}...`)
+
+      execSync(
+        `${pythonCommand} ml/predict_race.py ${raceId} --quiet`,
+        {
+          cwd: process.cwd(),
+          encoding: 'utf-8',
+          stdio: 'inherit'
+        }
+      )
+
+      // DBから保存された予測を再取得
+      const { data: newPredictions, error: newPredError } = await supabase
+        .from('predictions')
+        .select('*')
+        .eq('race_id', raceId)
+
+      if (newPredError || !newPredictions || newPredictions.length === 0) {
+        throw new Error('Failed to retrieve predictions after generation')
+      }
+
+      const predictions = newPredictions.map(pred => ({
+        boatNumber: pred.boat_number,
+        racerName: raceData.find(r => r.boat_number === pred.boat_number)?.racers?.name || 'Unknown',
+        racerNumber: raceData.find(r => r.boat_number === pred.boat_number)?.racer_id || 0,
+        grade: raceData.find(r => r.boat_number === pred.boat_number)?.racers?.grade || 'B2',
+        motorNumber: raceData.find(r => r.boat_number === pred.boat_number)?.motor_number?.toString() || 'N/A',
+        winProb: pred.predicted_win_prob || 0,
+        secondProb: pred.predicted_second_prob || 0,
+        thirdProb: pred.predicted_third_prob || 0,
+        fourthProb: pred.predicted_fourth_prob || 0,
+        fifthProb: pred.predicted_fifth_prob || 0,
+        sixthProb: pred.predicted_sixth_prob || 0,
+      }))
+
+      const recommendations = calculateRecommendations(predictions)
+
+      return NextResponse.json({
+        predictions,
+        recommendations,
+        modelVersion: newPredictions[0]?.model_version || 'latest'
+      })
+
+    } catch (mlError) {
+      console.error('ML prediction error:', mlError)
+
+      // MLモデルが使用できない場合のフォールバック
+      console.warn('Falling back to dummy predictions')
+
+      const fallbackPredictions = raceData.map(entry => ({
         boatNumber: entry.boat_number,
         racerName: entry.racers?.name || 'Unknown',
         racerNumber: entry.racer_id,
         grade: entry.racers?.grade || 'B2',
         motorNumber: entry.motor_number?.toString() || 'N/A',
-        winProb: winProb,
-        secondProb: 0.15 + Math.random() * 0.1,
-        thirdProb: 0.15 + Math.random() * 0.1,
-        fourthProb: 0.15 + Math.random() * 0.1,
-        fifthProb: 0.10 + Math.random() * 0.1,
-        sixthProb: 0.05 + Math.random() * 0.1,
-      }
-    })
+        winProb: 1.0 / 6.0,
+        secondProb: 1.0 / 6.0,
+        thirdProb: 1.0 / 6.0,
+        fourthProb: 1.0 / 6.0,
+        fifthProb: 1.0 / 6.0,
+        sixthProb: 1.0 / 6.0,
+      }))
 
-    const recommendations = calculateRecommendations(dummyPredictions)
+      const recommendations = calculateRecommendations(fallbackPredictions)
 
-    return NextResponse.json({
-      predictions: dummyPredictions,
-      recommendations,
-      note: 'This is dummy prediction data. ML model integration required.'
-    })
+      return NextResponse.json({
+        predictions: fallbackPredictions,
+        recommendations,
+        warning: 'ML model unavailable, using uniform probability distribution',
+        error: mlError instanceof Error ? mlError.message : 'Unknown error'
+      })
+    }
 
   } catch (error) {
     console.error('Prediction error:', error)

@@ -30,6 +30,19 @@ export default function Home() {
         </div>
       </section>
 
+      <section className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg shadow-md p-8 text-white">
+        <h2 className="text-2xl font-bold mb-4">データ分析ダッシュボード</h2>
+        <p className="mb-6 opacity-90">
+          艇別成績、選手ランキング、コース分析など、詳細なデータ分析を確認できます。
+        </p>
+        <Link
+          href="/analytics"
+          className="inline-block bg-white text-blue-600 font-bold py-3 px-6 rounded-lg hover:bg-blue-50 transition-colors shadow-lg"
+        >
+          分析ダッシュボードを開く →
+        </Link>
+      </section>
+
       <section className="bg-white rounded-lg shadow-md p-8">
         <h2 className="text-2xl font-bold mb-4">機能</h2>
         <ul className="space-y-3">

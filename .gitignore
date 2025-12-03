@@ -54,3 +54,19 @@ ENV/
 *.log
 progress.log
 scrape.log
+*.txt
+!requirements.txt
+!README*.txt
+
+# test files
+**/test_*.py
+**/diagnose_*.py
+
+# sample files
+**/*_sample.html
+**/*_sample.json
+
+# temporary files
+nul
+*.lzh
+*_extracted/
