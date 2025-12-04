@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { getWeatherData, getPredictions, generateAIComment } from '@/lib/predictions'
 import { VENUES, WeatherData } from '@/types'
+import BetRecommendations from './BetRecommendations'
 
 interface RacePredictionProps {
   venueId: number
@@ -24,18 +25,26 @@ interface PredictionData {
   sixthProb: number
 }
 
-interface Recommendation {
-  type: string
-  bet: string
-  probability: number
+interface BetItem {
+  combo?: string
+  boat?: number
+  prob: number
   confidence: string
+}
+
+interface Recommendations {
+  tansho: BetItem[]
+  nirenpuku: BetItem[]
+  nirentan: BetItem[]
+  sanrenpuku: BetItem[]
+  sanrentan: BetItem[]
 }
 
 export default function RacePrediction({ venueId, date, raceNumber }: RacePredictionProps) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [predictions, setPredictions] = useState<PredictionData[]>([])
-  const [recommendations, setRecommendations] = useState<Recommendation[]>([])
+  const [recommendations, setRecommendations] = useState<Recommendations | null>(null)
   const [weather, setWeather] = useState<WeatherData | null>(null)
   const [aiComment, setAiComment] = useState<string>('')
 
@@ -64,7 +73,7 @@ export default function RacePrediction({ venueId, date, raceNumber }: RacePredic
         // 予測データ取得
         const predictionResult = await getPredictions(race.id)
         setPredictions(predictionResult.predictions)
-        setRecommendations(predictionResult.recommendations || [])
+        setRecommendations(predictionResult.recommendations || null)
 
         // AIコメント生成
         const venueName = VENUES[venueId]?.name || ''
@@ -104,13 +113,6 @@ export default function RacePrediction({ venueId, date, raceNumber }: RacePredic
   const sortedPredictions = [...predictions].sort((a, b) => b.winProb - a.winProb)
   const venue = VENUES[venueId]
 
-  // 着順予想計算
-  const top3 = sortedPredictions.slice(0, 3)
-  const exacta = top3.length >= 2 ? `${top3[0].boatNumber}-${top3[1].boatNumber}` : '-'
-  const trifecta = top3.length >= 3 ? `${top3[0].boatNumber}-${top3[1].boatNumber}-${top3[2].boatNumber}` : '-'
-  const quinella = top3.length >= 2 ? `${Math.min(top3[0].boatNumber, top3[1].boatNumber)}-${Math.max(top3[0].boatNumber, top3[1].boatNumber)}` : '-'
-  const trio = top3.length >= 3 ? [top3[0].boatNumber, top3[1].boatNumber, top3[2].boatNumber].sort((a, b) => a - b).join('-') : '-'
-
   return (
     <div className="space-y-6">
       {/* レース情報ヘッダー */}
@@ -123,37 +125,13 @@ export default function RacePrediction({ venueId, date, raceNumber }: RacePredic
         </p>
       </div>
 
-      {/* 推奨買い目 */}
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <h3 className="text-lg font-bold text-neutral-800 mb-4 border-b pb-2">推奨買い目</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          <div className="border rounded-lg p-4">
-            <p className="text-xs text-gray-600 mb-1">単勝</p>
-            <p className="text-3xl font-bold text-[#3c71dd]">{top3[0]?.boatNumber || '-'}</p>
-            <p className="text-xs text-gray-500 mt-1">1着予想</p>
-          </div>
-          <div className="border rounded-lg p-4">
-            <p className="text-xs text-gray-600 mb-1">2連単</p>
-            <p className="text-2xl font-bold text-[#3c71dd]">{exacta}</p>
-            <p className="text-xs text-gray-500 mt-1">1-2着順</p>
-          </div>
-          <div className="border rounded-lg p-4">
-            <p className="text-xs text-gray-600 mb-1">3連単</p>
-            <p className="text-2xl font-bold text-[#3c71dd]">{trifecta}</p>
-            <p className="text-xs text-gray-500 mt-1">1-2-3着順</p>
-          </div>
-          <div className="border rounded-lg p-4">
-            <p className="text-xs text-gray-600 mb-1">2連複</p>
-            <p className="text-2xl font-bold text-[#3c71dd]">{quinella}</p>
-            <p className="text-xs text-gray-500 mt-1">1-2着（順不同）</p>
-          </div>
-          <div className="border rounded-lg p-4">
-            <p className="text-xs text-gray-600 mb-1">3連複</p>
-            <p className="text-2xl font-bold text-[#3c71dd]">{trio}</p>
-            <p className="text-xs text-gray-500 mt-1">1-2-3着（順不同）</p>
-          </div>
+      {/* 推奨買い目（全5賭け式） */}
+      {recommendations && (
+        <div>
+          <h3 className="text-lg font-bold text-neutral-800 mb-4">推奨買い目</h3>
+          <BetRecommendations recommendations={recommendations} />
         </div>
-      </div>
+      )}
 
       {/* 天候情報 */}
       {weather && (

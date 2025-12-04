@@ -100,11 +100,11 @@ export async function POST(request: NextRequest) {
       const { execSync } = require('child_process')
       const pythonCommand = process.platform === 'win32' ? 'python' : 'python3'
 
-      // Pythonスクリプトを実行して予測を生成＆DBに保存
-      console.log(`Running Python prediction for race ${raceId}...`)
+      // 強化版Pythonスクリプトを実行して予測を生成＆DBに保存
+      console.log(`Running enhanced Python prediction for race ${raceId}...`)
 
       execSync(
-        `${pythonCommand} ml/predict_race.py ${raceId} --quiet`,
+        `${pythonCommand} ml/predict_race_enhanced.py ${raceId} --quiet`,
         {
           cwd: process.cwd(),
           encoding: 'utf-8',
@@ -183,41 +183,100 @@ export async function POST(request: NextRequest) {
   }
 }
 
-function calculateRecommendations(predictions: any[]): any[] {
-  const recommendations = []
-
-  // 単勝推奨
-  for (const pred of predictions) {
-    if (pred.winProb > 0.25) {
-      recommendations.push({
-        type: '単勝',
-        bet: `${pred.boatNumber}`,
-        probability: pred.winProb,
-        confidence: pred.winProb > 0.4 ? '高' : pred.winProb > 0.3 ? '中' : '低'
-      })
-    }
+function calculateRecommendations(predictions: any[]): any {
+  const recommendations: any = {
+    tansho: [],      // 単勝
+    nirenpuku: [],   // 2連複
+    nirentan: [],    // 2連単
+    sanrenpuku: [],  // 3連複
+    sanrentan: []    // 3連単
   }
 
-  // 2連単推奨（上位2艇の組み合わせ）
+  // 単勝（全艇）
   const sortedByWin = [...predictions].sort((a, b) => b.winProb - a.winProb)
-  for (let i = 0; i < Math.min(2, sortedByWin.length); i++) {
-    for (let j = 0; j < Math.min(3, sortedByWin.length); j++) {
+  for (const pred of sortedByWin) {
+    recommendations.tansho.push({
+      boat: pred.boatNumber,
+      prob: pred.winProb,
+      confidence: pred.winProb > 0.4 ? '高' : pred.winProb > 0.3 ? '中' : '低'
+    })
+  }
+
+  // 2連単（上位組み合わせ）
+  const nirentanList: any[] = []
+  for (let i = 0; i < 6; i++) {
+    for (let j = 0; j < 6; j++) {
       if (i !== j) {
-        const prob = sortedByWin[i].winProb * sortedByWin[j].secondProb
-        if (prob > 0.08) {
-          recommendations.push({
-            type: '2連単',
-            bet: `${sortedByWin[i].boatNumber}-${sortedByWin[j].boatNumber}`,
-            probability: prob,
-            confidence: prob > 0.15 ? '高' : prob > 0.10 ? '中' : '低'
-          })
-        }
+        const prob = predictions[i].winProb * predictions[j].secondProb
+        nirentanList.push({
+          combo: `${predictions[i].boatNumber}-${predictions[j].boatNumber}`,
+          prob: prob,
+          confidence: prob > 0.12 ? '高' : prob > 0.08 ? '中' : '低'
+        })
       }
     }
   }
+  nirentanList.sort((a, b) => b.prob - a.prob)
+  recommendations.nirentan = nirentanList.slice(0, 10)
 
-  // 確率でソート
-  recommendations.sort((a, b) => b.probability - a.probability)
+  // 2連複（上位組み合わせ）
+  const nirenpukuList: any[] = []
+  for (let i = 0; i < 6; i++) {
+    for (let j = i + 1; j < 6; j++) {
+      const prob = predictions[i].winProb * predictions[j].secondProb +
+                   predictions[j].winProb * predictions[i].secondProb
+      nirenpukuList.push({
+        combo: `${Math.min(predictions[i].boatNumber, predictions[j].boatNumber)}=${Math.max(predictions[i].boatNumber, predictions[j].boatNumber)}`,
+        prob: prob,
+        confidence: prob > 0.15 ? '高' : prob > 0.10 ? '中' : '低'
+      })
+    }
+  }
+  nirenpukuList.sort((a, b) => b.prob - a.prob)
+  recommendations.nirenpuku = nirenpukuList.slice(0, 10)
 
-  return recommendations.slice(0, 10)
+  // 3連単（上位組み合わせ）
+  const sanrentanList: any[] = []
+  for (let i = 0; i < 6; i++) {
+    for (let j = 0; j < 6; j++) {
+      if (j === i) continue
+      for (let k = 0; k < 6; k++) {
+        if (k === i || k === j) continue
+        const prob = predictions[i].winProb * predictions[j].secondProb * predictions[k].thirdProb
+        sanrentanList.push({
+          combo: `${predictions[i].boatNumber}-${predictions[j].boatNumber}-${predictions[k].boatNumber}`,
+          prob: prob,
+          confidence: prob > 0.05 ? '高' : prob > 0.02 ? '中' : '低'
+        })
+      }
+    }
+  }
+  sanrentanList.sort((a, b) => b.prob - a.prob)
+  recommendations.sanrentan = sanrentanList.slice(0, 10)
+
+  // 3連複（上位組み合わせ）
+  const sanrenpukuList: any[] = []
+  for (let i = 0; i < 6; i++) {
+    for (let j = i + 1; j < 6; j++) {
+      for (let k = j + 1; k < 6; k++) {
+        // 全順列の確率合計
+        let prob = 0
+        const boats = [predictions[i], predictions[j], predictions[k]]
+        const perms = [[0,1,2], [0,2,1], [1,0,2], [1,2,0], [2,0,1], [2,1,0]]
+        for (const perm of perms) {
+          prob += boats[perm[0]].winProb * boats[perm[1]].secondProb * boats[perm[2]].thirdProb
+        }
+        const sortedBoats = [predictions[i].boatNumber, predictions[j].boatNumber, predictions[k].boatNumber].sort((a,b) => a-b)
+        sanrenpukuList.push({
+          combo: `${sortedBoats[0]}=${sortedBoats[1]}=${sortedBoats[2]}`,
+          prob: prob,
+          confidence: prob > 0.08 ? '高' : prob > 0.04 ? '中' : '低'
+        })
+      }
+    }
+  }
+  sanrenpukuList.sort((a, b) => b.prob - a.prob)
+  recommendations.sanrenpuku = sanrenpukuList.slice(0, 10)
+
+  return recommendations
 }

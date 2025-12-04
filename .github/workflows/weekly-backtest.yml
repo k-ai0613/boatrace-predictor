@@ -1,0 +1,52 @@
+name: Weekly Backtest
+
+on:
+  schedule:
+    # 毎週日曜 15:00 JST (06:00 UTC)
+    - cron: '0 6 * * 0'
+  workflow_dispatch:  # 手動実行も可能
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r ml/requirements.txt
+
+      - name: Run backtest
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          echo "=== Weekly Backtest ==="
+          echo "Date: $(date)"
+          echo ""
+
+          # 300レースでバックテスト実行、結果をDBに保存、精度低下をチェック
+          python ml/backtest.py \
+            --races 300 \
+            --save \
+            --check-degradation \
+            --quiet
+
+      - name: Check for model file
+        run: |
+          if [ -f "ml/trained_model_latest.pkl" ]; then
+            echo "Model file exists"
+            ls -la ml/trained_model_latest.pkl
+          else
+            echo "Warning: Model file not found"
+          fi
