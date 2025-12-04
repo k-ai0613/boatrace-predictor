@@ -75,11 +75,19 @@ python scraper/test_db.py
    - 月1回（毎月1日深夜4時）に自動実行
    - 選手・会場の詳細統計を更新
 
+4. **週次バックテスト** (`weekly-backtest.yml`)
+   - 毎週日曜15:00（JST）に自動実行
+   - 300レースで精度検証
+   - 結果をDBに保存、精度低下時はアラート
+
 #### 機械学習モデル
 
 ```bash
 # クイックスタート: デフォルトパラメータで訓練
 python ml/evaluate_model.py
+
+# 強化版モデル訓練（推奨）
+python ml/train_enhanced_model.py
 
 # ステップ1: ハイパーパラメータ最適化（2-6時間）
 python ml/hyperparameter_tuning.py
@@ -93,8 +101,31 @@ python ml/advanced_stats.py
 # 統合パイプライン（全自動）
 python ml/train_full_pipeline.py
 
-# 予測実行（race_idを指定）
-python ml/predict_race.py <race_id>
+# 予測実行（race_idを指定）- 全5賭け式対応
+python ml/predict_race_enhanced.py <race_id>
+```
+
+#### バックテスト検証
+
+```bash
+# 精度検証（200レース）
+python ml/backtest.py --races 200
+
+# 結果をDBに保存
+python ml/backtest.py --races 200 --save
+
+# 精度低下チェック付き
+python ml/backtest.py --races 200 --save --check-degradation
+```
+
+#### 指定日のデータ取得
+
+```bash
+# 特定日のレースデータを取得（未来の予定レースも可）
+python scraper/fetch_scheduled_races.py 2025-12-07
+
+# 特定会場のみ
+python scraper/fetch_scheduled_races.py 2025-12-07 --venue 2
 ```
 
 ---
@@ -164,17 +195,23 @@ boat/
 │
 ├── ml/                        # 機械学習
 │   ├── feature_engineer.py   # 特徴量エンジニアリング
+│   ├── enhanced_feature_engineer.py  # 強化版特徴量（35次元）
 │   ├── race_predictor.py     # 予測モデル（クラス定義）
+│   ├── improved_combination_predictor.py  # 5賭け式確率計算
 │   ├── train_model.py        # モデル訓練
+│   ├── train_enhanced_model.py  # 強化版訓練（推奨）
 │   ├── evaluate_model.py     # モデル評価
+│   ├── backtest.py           # バックテスト検証
 │   ├── hyperparameter_tuning.py  # ハイパーパラメータ最適化
 │   ├── predict_race.py       # 予測実行スクリプト
+│   ├── predict_race_enhanced.py  # 強化版予測（5賭け式）
 │   └── trained_model_latest.pkl  # 訓練済みモデル
 │
 ├── scraper/                   # データ収集
 │   ├── collect_gentle.py           # 推奨: 柔軟な収集スクリプト
 │   ├── collect_historical_data.py  # 特定期間のデータ収集
 │   ├── collect_monthly.py          # 月単位のデータ収集
+│   ├── fetch_scheduled_races.py    # 指定日のレースデータ取得
 │   ├── get_next_backfill_month.py  # 次の収集月を自動判定
 │   ├── rate_limiter.py             # レート制限機構
 │   ├── check_data_status.py        # データ状況確認（概要）
@@ -185,6 +222,7 @@ boat/
 │   ├── collect-detailed-stats.yml   # 詳細統計収集（月1回）
 │   ├── daily-kyotei-collection.yml  # 日次データ収集（毎日）
 │   ├── auto-monthly-backfill.yml    # 自動バックフィル（毎日）
+│   ├── weekly-backtest.yml          # 週次バックテスト（毎週日曜）
 │   └── monthly-backfill.yml         # 手動バックフィル
 │
 ├── supabase/                  # Supabaseセキュリティ設定
@@ -268,6 +306,7 @@ requests_per_day = 10000     # 1日に10,000リクエスト
 - `venue_detailed_stats` - 会場詳細統計
 - `weather_data` - 天気情報
 - `predictions` - 予測結果
+- `backtest_results` - バックテスト精度履歴
 
 #### セキュリティ設定
 
