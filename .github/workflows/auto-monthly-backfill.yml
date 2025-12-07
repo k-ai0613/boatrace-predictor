@@ -1,16 +1,16 @@
 name: Auto Monthly Backfill
 
 on:
-  # 4パートに分割して実行（各3時間間隔、サーバー負荷軽減）
+  # 4パートに分割して実行（各6時間間隔、1パート約5時間で完了）
   # Part 1: 03:00 JST (18:00 UTC) - 会場1-6
-  # Part 2: 06:00 JST (21:00 UTC) - 会場7-12
-  # Part 3: 09:00 JST (00:00 UTC) - 会場13-18
-  # Part 4: 12:00 JST (03:00 UTC) - 会場19-24
+  # Part 2: 09:00 JST (00:00 UTC) - 会場7-12
+  # Part 3: 15:00 JST (06:00 UTC) - 会場13-18
+  # Part 4: 21:00 JST (12:00 UTC) - 会場19-24
   schedule:
     - cron: '0 18 * * *'  # Part 1: 18:00 UTC (03:00 JST)
-    - cron: '0 21 * * *'  # Part 2: 21:00 UTC (06:00 JST)
-    - cron: '0 0 * * *'   # Part 3: 00:00 UTC (09:00 JST)
-    - cron: '0 3 * * *'   # Part 4: 03:00 UTC (12:00 JST)
+    - cron: '0 0 * * *'   # Part 2: 00:00 UTC (09:00 JST)
+    - cron: '0 6 * * *'   # Part 3: 06:00 UTC (15:00 JST)
+    - cron: '0 12 * * *'  # Part 4: 12:00 UTC (21:00 JST)
 
   # 手動実行も可能
   workflow_dispatch:
@@ -29,7 +29,7 @@ jobs:
   backfill-part1:
     runs-on: ubuntu-latest
     timeout-minutes: 360  # 6時間（GitHub Actions最大値）
-    # schedule[0] (18:00 UTC) または手動実行でpart=1か空欄の場合
+    # schedule[0] (18:00 UTC / 03:00 JST) または手動実行でpart=1か空欄の場合
     if: |
       github.event_name == 'workflow_dispatch' && (github.event.inputs.venue_part == '1' || github.event.inputs.venue_part == '') ||
       github.event_name == 'schedule' && github.event.schedule == '0 18 * * *'
@@ -107,17 +107,17 @@ jobs:
           echo "- **Completed at**: $(date)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "#### Next: Part 2 (Venues 7-12)" >> $GITHUB_STEP_SUMMARY
-          echo "- Runs at 06:00 JST (21:00 UTC)" >> $GITHUB_STEP_SUMMARY
+          echo "- Runs at 09:00 JST (00:00 UTC)" >> $GITHUB_STEP_SUMMARY
         fi
 
   # Part 2: 会場7-12を収集
   backfill-part2:
     runs-on: ubuntu-latest
     timeout-minutes: 360  # 6時間（GitHub Actions最大値）
-    # schedule[1] (21:00 UTC) または手動実行でpart=2か空欄の場合
+    # schedule[1] (00:00 UTC / 09:00 JST) または手動実行でpart=2か空欄の場合
     if: |
       github.event_name == 'workflow_dispatch' && (github.event.inputs.venue_part == '2' || github.event.inputs.venue_part == '') ||
-      github.event_name == 'schedule' && github.event.schedule == '0 21 * * *'
+      github.event_name == 'schedule' && github.event.schedule == '0 0 * * *'
 
     steps:
     - name: Checkout code
@@ -192,17 +192,17 @@ jobs:
           echo "- **Completed at**: $(date)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "#### Next: Part 3 (Venues 13-18)" >> $GITHUB_STEP_SUMMARY
-          echo "- Runs at 09:00 JST (00:00 UTC)" >> $GITHUB_STEP_SUMMARY
+          echo "- Runs at 15:00 JST (06:00 UTC)" >> $GITHUB_STEP_SUMMARY
         fi
 
   # Part 3: 会場13-18を収集
   backfill-part3:
     runs-on: ubuntu-latest
     timeout-minutes: 360  # 6時間（GitHub Actions最大値）
-    # schedule[2] (00:00 UTC) または手動実行でpart=3か空欄の場合
+    # schedule[2] (06:00 UTC / 15:00 JST) または手動実行でpart=3か空欄の場合
     if: |
       github.event_name == 'workflow_dispatch' && (github.event.inputs.venue_part == '3' || github.event.inputs.venue_part == '') ||
-      github.event_name == 'schedule' && github.event.schedule == '0 0 * * *'
+      github.event_name == 'schedule' && github.event.schedule == '0 6 * * *'
 
     steps:
     - name: Checkout code
@@ -277,17 +277,17 @@ jobs:
           echo "- **Completed at**: $(date)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "#### Next: Part 4 (Venues 19-24)" >> $GITHUB_STEP_SUMMARY
-          echo "- Runs at 12:00 JST (03:00 UTC)" >> $GITHUB_STEP_SUMMARY
+          echo "- Runs at 21:00 JST (12:00 UTC)" >> $GITHUB_STEP_SUMMARY
         fi
 
   # Part 4: 会場19-24を収集
   backfill-part4:
     runs-on: ubuntu-latest
     timeout-minutes: 360  # 6時間（GitHub Actions最大値）
-    # schedule[3] (03:00 UTC) または手動実行でpart=4か空欄の場合
+    # schedule[3] (12:00 UTC / 21:00 JST) または手動実行でpart=4か空欄の場合
     if: |
       github.event_name == 'workflow_dispatch' && (github.event.inputs.venue_part == '4' || github.event.inputs.venue_part == '') ||
-      github.event_name == 'schedule' && github.event.schedule == '0 3 * * *'
+      github.event_name == 'schedule' && github.event.schedule == '0 12 * * *'
 
     steps:
     - name: Checkout code
