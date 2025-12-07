@@ -28,7 +28,7 @@ jobs:
   # Part 1: 会場1-6を収集
   backfill-part1:
     runs-on: ubuntu-latest
-    timeout-minutes: 240  # 4時間（余裕を持たせる）
+    timeout-minutes: 360  # 6時間（GitHub Actions最大値）
     # schedule[0] (18:00 UTC) または手動実行でpart=1か空欄の場合
     if: |
       github.event_name == 'workflow_dispatch' && (github.event.inputs.venue_part == '1' || github.event.inputs.venue_part == '') ||
@@ -113,7 +113,7 @@ jobs:
   # Part 2: 会場7-12を収集
   backfill-part2:
     runs-on: ubuntu-latest
-    timeout-minutes: 240  # 4時間
+    timeout-minutes: 360  # 6時間（GitHub Actions最大値）
     # schedule[1] (21:00 UTC) または手動実行でpart=2か空欄の場合
     if: |
       github.event_name == 'workflow_dispatch' && (github.event.inputs.venue_part == '2' || github.event.inputs.venue_part == '') ||
@@ -198,7 +198,7 @@ jobs:
   # Part 3: 会場13-18を収集
   backfill-part3:
     runs-on: ubuntu-latest
-    timeout-minutes: 240  # 4時間
+    timeout-minutes: 360  # 6時間（GitHub Actions最大値）
     # schedule[2] (00:00 UTC) または手動実行でpart=3か空欄の場合
     if: |
       github.event_name == 'workflow_dispatch' && (github.event.inputs.venue_part == '3' || github.event.inputs.venue_part == '') ||
@@ -283,7 +283,7 @@ jobs:
   # Part 4: 会場19-24を収集
   backfill-part4:
     runs-on: ubuntu-latest
-    timeout-minutes: 240  # 4時間
+    timeout-minutes: 360  # 6時間（GitHub Actions最大値）
     # schedule[3] (03:00 UTC) または手動実行でpart=4か空欄の場合
     if: |
       github.event_name == 'workflow_dispatch' && (github.event.inputs.venue_part == '4' || github.event.inputs.venue_part == '') ||
