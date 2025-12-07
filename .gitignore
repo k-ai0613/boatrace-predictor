@@ -49,6 +49,7 @@ ENV/
 
 # ML models
 *.pkl
+!ml/trained_model_latest.pkl
 *.h5
 *.joblib
 
