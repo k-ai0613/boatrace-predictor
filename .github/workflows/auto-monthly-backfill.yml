@@ -110,6 +110,30 @@ jobs:
           echo "- Runs at 09:00 JST (00:00 UTC)" >> $GITHUB_STEP_SUMMARY
         fi
 
+    - name: Create issue on failure
+      if: failure()
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const title = `[Auto] Backfill Part 1 Failed - ${new Date().toISOString().split('T')[0]}`;
+          const body = `## Backfill Part 1 Failure (Venues 1-6)
+
+          **Workflow Run**: [${context.runId}](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})
+          **Target Month**: ${{ steps.month.outputs.target }}
+
+          ### Action Required
+          - Check the workflow logs for error details
+          - Manually run: \`python scraper/collect_monthly.py --year-month ${{ steps.month.outputs.target }} --start-venue 1 --end-venue 6\`
+          `;
+
+          await github.rest.issues.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: title,
+            body: body,
+            labels: ['bug', 'backfill', 'automated']
+          });
+
   # Part 2: 会場7-12を収集
   backfill-part2:
     runs-on: ubuntu-latest
@@ -194,6 +218,30 @@ jobs:
           echo "#### Next: Part 3 (Venues 13-18)" >> $GITHUB_STEP_SUMMARY
           echo "- Runs at 15:00 JST (06:00 UTC)" >> $GITHUB_STEP_SUMMARY
         fi
+
+    - name: Create issue on failure
+      if: failure()
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const title = `[Auto] Backfill Part 2 Failed - ${new Date().toISOString().split('T')[0]}`;
+          const body = `## Backfill Part 2 Failure (Venues 7-12)
+
+          **Workflow Run**: [${context.runId}](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})
+          **Target Month**: ${{ steps.month.outputs.target }}
+
+          ### Action Required
+          - Check the workflow logs for error details
+          - Manually run: \`python scraper/collect_monthly.py --year-month ${{ steps.month.outputs.target }} --start-venue 7 --end-venue 12\`
+          `;
+
+          await github.rest.issues.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: title,
+            body: body,
+            labels: ['bug', 'backfill', 'automated']
+          });
 
   # Part 3: 会場13-18を収集
   backfill-part3:
@@ -280,6 +328,30 @@ jobs:
           echo "- Runs at 21:00 JST (12:00 UTC)" >> $GITHUB_STEP_SUMMARY
         fi
 
+    - name: Create issue on failure
+      if: failure()
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const title = `[Auto] Backfill Part 3 Failed - ${new Date().toISOString().split('T')[0]}`;
+          const body = `## Backfill Part 3 Failure (Venues 13-18)
+
+          **Workflow Run**: [${context.runId}](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})
+          **Target Month**: ${{ steps.month.outputs.target }}
+
+          ### Action Required
+          - Check the workflow logs for error details
+          - Manually run: \`python scraper/collect_monthly.py --year-month ${{ steps.month.outputs.target }} --start-venue 13 --end-venue 18\`
+          `;
+
+          await github.rest.issues.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: title,
+            body: body,
+            labels: ['bug', 'backfill', 'automated']
+          });
+
   # Part 4: 会場19-24を収集
   backfill-part4:
     runs-on: ubuntu-latest
@@ -365,3 +437,27 @@ jobs:
           echo "- Part 1 (Venues 1-6): Tomorrow at 03:00 JST" >> $GITHUB_STEP_SUMMARY
           echo "- Will collect the next older month automatically" >> $GITHUB_STEP_SUMMARY
         fi
+
+    - name: Create issue on failure
+      if: failure()
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const title = `[Auto] Backfill Part 4 Failed - ${new Date().toISOString().split('T')[0]}`;
+          const body = `## Backfill Part 4 Failure (Venues 19-24)
+
+          **Workflow Run**: [${context.runId}](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})
+          **Target Month**: ${{ steps.month.outputs.target }}
+
+          ### Action Required
+          - Check the workflow logs for error details
+          - Manually run: \`python scraper/collect_monthly.py --year-month ${{ steps.month.outputs.target }} --start-venue 19 --end-venue 24\`
+          `;
+
+          await github.rest.issues.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: title,
+            body: body,
+            labels: ['bug', 'backfill', 'automated']
+          });

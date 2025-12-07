@@ -1,0 +1,124 @@
+name: Monthly Model Retrain
+
+on:
+  # 毎月1日 05:00 JST (20:00 UTC前日) に実行
+  schedule:
+    - cron: '0 20 1 * *'
+
+  # 手動実行も可能
+  workflow_dispatch:
+
+jobs:
+  retrain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120  # 2時間
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        lfs: true
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        pip install -r ml/requirements.txt
+
+    - name: Check data status
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      run: |
+        echo "=== Data Status Check ==="
+        python scraper/check_data_status.py
+
+    - name: Train enhanced model
+      id: train
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      run: |
+        echo "=== Training Enhanced Model ==="
+        python ml/train_enhanced_model.py
+
+        # モデルファイルの存在確認
+        if [ -f "ml/trained_model_latest.pkl" ]; then
+          echo "model_updated=true" >> $GITHUB_OUTPUT
+          echo "Model file updated successfully"
+          ls -la ml/trained_model_latest.pkl
+        else
+          echo "model_updated=false" >> $GITHUB_OUTPUT
+          echo "::error::Model file not found after training"
+          exit 1
+        fi
+
+    - name: Run validation backtest
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      run: |
+        echo "=== Validation Backtest ==="
+        python ml/backtest.py --races 100 --quiet
+
+    - name: Commit and push model
+      if: steps.train.outputs.model_updated == 'true'
+      run: |
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
+        git config --local user.name "github-actions[bot]"
+
+        # モデルファイルをステージング
+        git add ml/trained_model_latest.pkl
+
+        # 変更がある場合のみコミット
+        if git diff --staged --quiet; then
+          echo "No changes to commit"
+        else
+          git commit -m "Auto: Monthly model retrain $(date +%Y-%m-%d)
+
+          Automated model retraining by GitHub Actions
+
+          🤖 Generated with GitHub Actions"
+          git push
+          echo "Model committed and pushed successfully"
+        fi
+
+    - name: Summary
+      if: always()
+      run: |
+        echo "### Monthly Model Retrain" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- **Date**: $(date)" >> $GITHUB_STEP_SUMMARY
+        echo "- **Model Updated**: ${{ steps.train.outputs.model_updated }}" >> $GITHUB_STEP_SUMMARY
+
+    - name: Create issue on failure
+      if: failure()
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const title = `[Auto] Model Retrain Failed - ${new Date().toISOString().split('T')[0]}`;
+          const body = `## Model Retrain Failure
+
+          **Workflow Run**: [${context.runId}](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})
+          **Date**: ${new Date().toISOString()}
+
+          ### Action Required
+          - Check the workflow logs for error details
+          - Manually run \`python ml/train_enhanced_model.py\` to debug
+          - Ensure sufficient training data exists
+
+          ### Possible Causes
+          - Database connection issues
+          - Insufficient training data
+          - Memory/timeout issues
+          `;
+
+          await github.rest.issues.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: title,
+            body: body,
+            labels: ['bug', 'automated']
+          });

@@ -28,6 +28,7 @@ jobs:
           pip install -r ml/requirements.txt
 
       - name: Run backtest
+        id: backtest
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
@@ -36,11 +37,23 @@ jobs:
           echo ""
 
           # 300レースでバックテスト実行、結果をDBに保存、精度低下をチェック
+          # 結果をファイルに保存
           python ml/backtest.py \
             --races 300 \
             --save \
             --check-degradation \
-            --quiet
+            --quiet 2>&1 | tee backtest_output.txt
+
+          # 精度低下の検出
+          if grep -q "DEGRADATION" backtest_output.txt; then
+            echo "degradation_detected=true" >> $GITHUB_OUTPUT
+          else
+            echo "degradation_detected=false" >> $GITHUB_OUTPUT
+          fi
+
+          # 精度を抽出（例: "Top1 Accuracy: 25.3%"）
+          ACCURACY=$(grep -oP 'Top1 Accuracy: \K[\d.]+' backtest_output.txt || echo "unknown")
+          echo "accuracy=$ACCURACY" >> $GITHUB_OUTPUT
 
       - name: Check for model file
         run: |
@@ -50,3 +63,71 @@ jobs:
           else
             echo "Warning: Model file not found"
           fi
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "### Weekly Backtest Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Date**: $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Accuracy**: ${{ steps.backtest.outputs.accuracy }}%" >> $GITHUB_STEP_SUMMARY
+          echo "- **Degradation Detected**: ${{ steps.backtest.outputs.degradation_detected }}" >> $GITHUB_STEP_SUMMARY
+
+      - name: Create issue on degradation
+        if: steps.backtest.outputs.degradation_detected == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = `[Alert] Model Accuracy Degradation Detected - ${new Date().toISOString().split('T')[0]}`;
+            const body = `## Model Accuracy Degradation Alert
+
+            **Workflow Run**: [${context.runId}](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})
+            **Date**: ${new Date().toISOString()}
+            **Current Accuracy**: ${{ steps.backtest.outputs.accuracy }}%
+
+            ### Recommended Actions
+            1. Review recent data quality
+            2. Consider retraining the model: \`python ml/train_enhanced_model.py\`
+            3. Check for data drift or anomalies
+
+            ### Auto-Resolution
+            The monthly model retrain workflow will automatically retrain on the 1st of next month.
+            `;
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: title,
+              body: body,
+              labels: ['alert', 'model-accuracy', 'automated']
+            });
+
+      - name: Create issue on failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = `[Auto] Weekly Backtest Failed - ${new Date().toISOString().split('T')[0]}`;
+            const body = `## Weekly Backtest Failure
+
+            **Workflow Run**: [${context.runId}](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})
+            **Date**: ${new Date().toISOString()}
+
+            ### Action Required
+            - Check the workflow logs for error details
+            - Ensure model file exists: \`ml/trained_model_latest.pkl\`
+            - Verify database connectivity
+
+            ### Possible Causes
+            - Model file not found (run \`python ml/train_enhanced_model.py\`)
+            - Database connection issues
+            - Insufficient test data
+            `;
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: title,
+              body: body,
+              labels: ['bug', 'automated']
+            });
