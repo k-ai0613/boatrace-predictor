@@ -78,7 +78,8 @@ if __name__ == "__main__":
 
     if target_month:
         print(target_month)
-        sys.exit(0)
     else:
-        print("COMPLETED", file=sys.stderr)
-        sys.exit(1)
+        # バックフィル完了時もexit 0で終了（GitHub Actionsでエラーにしない）
+        print("COMPLETED")
+
+    sys.exit(0)

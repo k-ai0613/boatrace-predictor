@@ -61,12 +61,12 @@ jobs:
           TARGET_MONTH=$(python scraper/get_next_backfill_month.py)
         fi
 
-        if [ $? -eq 0 ]; then
-          echo "target=$TARGET_MONTH" >> $GITHUB_OUTPUT
-          echo "収集対象月: $TARGET_MONTH (会場1-6)"
-        else
+        if [ "$TARGET_MONTH" = "COMPLETED" ]; then
           echo "skip=true" >> $GITHUB_OUTPUT
           echo "バックフィル完了: 2020年までのデータ収集が完了しました"
+        else
+          echo "target=$TARGET_MONTH" >> $GITHUB_OUTPUT
+          echo "収集対象月: $TARGET_MONTH (会場1-6)"
         fi
 
     - name: Collect monthly data (Venues 1-6)
@@ -170,12 +170,12 @@ jobs:
           TARGET_MONTH=$(python scraper/get_next_backfill_month.py)
         fi
 
-        if [ $? -eq 0 ]; then
-          echo "target=$TARGET_MONTH" >> $GITHUB_OUTPUT
-          echo "収集対象月: $TARGET_MONTH (会場7-12)"
-        else
+        if [ "$TARGET_MONTH" = "COMPLETED" ]; then
           echo "skip=true" >> $GITHUB_OUTPUT
           echo "バックフィル完了: 2020年までのデータ収集が完了しました"
+        else
+          echo "target=$TARGET_MONTH" >> $GITHUB_OUTPUT
+          echo "収集対象月: $TARGET_MONTH (会場7-12)"
         fi
 
     - name: Collect monthly data (Venues 7-12)
@@ -279,12 +279,12 @@ jobs:
           TARGET_MONTH=$(python scraper/get_next_backfill_month.py)
         fi
 
-        if [ $? -eq 0 ]; then
-          echo "target=$TARGET_MONTH" >> $GITHUB_OUTPUT
-          echo "収集対象月: $TARGET_MONTH (会場13-18)"
-        else
+        if [ "$TARGET_MONTH" = "COMPLETED" ]; then
           echo "skip=true" >> $GITHUB_OUTPUT
           echo "バックフィル完了: 2020年までのデータ収集が完了しました"
+        else
+          echo "target=$TARGET_MONTH" >> $GITHUB_OUTPUT
+          echo "収集対象月: $TARGET_MONTH (会場13-18)"
         fi
 
     - name: Collect monthly data (Venues 13-18)
@@ -388,12 +388,12 @@ jobs:
           TARGET_MONTH=$(python scraper/get_next_backfill_month.py)
         fi
 
-        if [ $? -eq 0 ]; then
-          echo "target=$TARGET_MONTH" >> $GITHUB_OUTPUT
-          echo "収集対象月: $TARGET_MONTH (会場19-24)"
-        else
+        if [ "$TARGET_MONTH" = "COMPLETED" ]; then
           echo "skip=true" >> $GITHUB_OUTPUT
           echo "バックフィル完了: 2020年までのデータ収集が完了しました"
+        else
+          echo "target=$TARGET_MONTH" >> $GITHUB_OUTPUT
+          echo "収集対象月: $TARGET_MONTH (会場19-24)"
         fi
 
     - name: Collect monthly data (Venues 19-24)
