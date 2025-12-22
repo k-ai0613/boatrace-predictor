@@ -1,0 +1,127 @@
+name: Backfill Weather Data
+
+on:
+  schedule:
+    # 06:00 JST = 21:00 UTC (前日)
+    # 他のワークフローと被らない時間帯
+    - cron: '0 21 * * *'
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: 'Maximum combinations to process'
+        required: false
+        default: '2400'
+
+jobs:
+  backfill-weather:
+    runs-on: ubuntu-latest
+    timeout-minutes: 130  # 2時間 + バッファ
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install -r scraper/requirements.txt
+
+      - name: Check remaining work
+        id: check
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          PENDING=$(python -c "
+          import os
+          import psycopg2
+          from dotenv import load_dotenv
+          load_dotenv()
+          conn = psycopg2.connect(os.getenv('DATABASE_URL'))
+          cursor = conn.cursor()
+          cursor.execute('''
+              SELECT COUNT(DISTINCT (race_date, venue_id))
+              FROM races
+              WHERE temperature IS NULL
+              AND race_date < CURRENT_DATE
+          ''')
+          print(cursor.fetchone()[0])
+          conn.close()
+          ")
+          echo "pending=$PENDING" >> $GITHUB_OUTPUT
+          echo "Pending combinations: $PENDING"
+
+      - name: Skip if complete
+        if: steps.check.outputs.pending == '0'
+        run: |
+          echo "All weather data has been backfilled!"
+          echo "Consider disabling this workflow."
+
+      - name: Run weather backfill
+        if: steps.check.outputs.pending != '0'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          LIMIT=${{ github.event.inputs.limit || '2400' }}
+          echo "Processing up to $LIMIT combinations..."
+          python scraper/backfill_weather.py --limit $LIMIT --delay 3.0
+
+      - name: Report progress
+        if: always()
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          python -c "
+          import os
+          import psycopg2
+          from dotenv import load_dotenv
+          load_dotenv()
+          conn = psycopg2.connect(os.getenv('DATABASE_URL'))
+          cursor = conn.cursor()
+
+          # 完了数
+          cursor.execute('''
+              SELECT COUNT(DISTINCT (race_date, venue_id))
+              FROM races
+              WHERE temperature IS NOT NULL
+          ''')
+          completed = cursor.fetchone()[0]
+
+          # 合計数
+          cursor.execute('''
+              SELECT COUNT(DISTINCT (race_date, venue_id))
+              FROM races
+              WHERE race_date < CURRENT_DATE
+          ''')
+          total = cursor.fetchone()[0]
+
+          # 天気データの統計
+          cursor.execute('''
+              SELECT
+                  COUNT(*) FILTER (WHERE temperature IS NOT NULL) as with_temp,
+                  COUNT(*) FILTER (WHERE wind_speed IS NOT NULL) as with_wind,
+                  COUNT(*) as total
+              FROM races
+              WHERE race_date < CURRENT_DATE
+          ''')
+          stats = cursor.fetchone()
+
+          conn.close()
+
+          print('=' * 50)
+          print('  Weather Backfill Progress')
+          print('=' * 50)
+          print(f'Combinations: {completed:,} / {total:,} ({completed*100/max(1,total):.1f}%)')
+          print(f'Races with temperature: {stats[0]:,} / {stats[2]:,}')
+          print(f'Races with wind: {stats[1]:,} / {stats[2]:,}')
+
+          remaining = total - completed
+          if remaining > 0:
+              days_left = remaining / 2400
+              print(f'Estimated days remaining: {days_left:.1f}')
+          else:
+              print('COMPLETE!')
+          "
