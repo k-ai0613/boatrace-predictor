@@ -1,0 +1,125 @@
+name: Cleanup Old Data
+
+on:
+  # 週1回の自動実行（毎週月曜 深夜3時 JST = 18:00 UTC 日曜）
+  schedule:
+    - cron: '0 18 * * 0'
+
+  # 手動実行も可能
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'ドライラン（削除せず確認のみ）'
+        required: false
+        type: boolean
+        default: false
+      force:
+        description: '強制削除（閾値に関係なく削除）'
+        required: false
+        type: boolean
+        default: false
+      status_only:
+        description: '容量状況のみ表示'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        pip install psycopg2-binary python-dotenv
+
+    - name: Check database status
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      run: |
+        python scraper/cleanup_old_data.py --status
+
+    - name: Cleanup old data (auto)
+      if: github.event_name == 'schedule'
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      run: |
+        echo "自動実行: 容量チェック & 必要に応じて削除"
+        python scraper/cleanup_old_data.py --threshold 90 --years 4
+
+    - name: Cleanup old data (manual)
+      if: github.event_name == 'workflow_dispatch' && !inputs.status_only
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      run: |
+        ARGS="--threshold 90 --years 4"
+
+        if [ "${{ inputs.dry_run }}" = "true" ]; then
+          ARGS="$ARGS --dry-run"
+          echo "ドライランモード: 削除は行いません"
+        fi
+
+        if [ "${{ inputs.force }}" = "true" ]; then
+          ARGS="$ARGS --force"
+          echo "強制削除モード: 閾値に関係なく削除"
+        fi
+
+        python scraper/cleanup_old_data.py $ARGS
+
+    - name: Summary
+      if: always()
+      run: |
+        echo "### Data Cleanup Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- **Trigger**: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Threshold**: 90% (450MB)" >> $GITHUB_STEP_SUMMARY
+        echo "- **Delete data older than**: 4 years" >> $GITHUB_STEP_SUMMARY
+        echo "- **Completed at**: $(date)" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "#### Protected tables (never deleted)" >> $GITHUB_STEP_SUMMARY
+        echo "- backtest_results" >> $GITHUB_STEP_SUMMARY
+        echo "- predictions" >> $GITHUB_STEP_SUMMARY
+        echo "- racer_statistics, racer_detailed_stats" >> $GITHUB_STEP_SUMMARY
+        echo "- venue_detailed_stats" >> $GITHUB_STEP_SUMMARY
+        echo "- racers" >> $GITHUB_STEP_SUMMARY
+        echo "- weather_data" >> $GITHUB_STEP_SUMMARY
+
+    - name: Create issue on failure
+      if: failure()
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const title = `[Auto] Data Cleanup Failed - ${new Date().toISOString().split('T')[0]}`;
+          const body = `## Data Cleanup Failure
+
+          **Workflow Run**: [${context.runId}](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})
+          **Date**: ${new Date().toISOString()}
+
+          ### Action Required
+          - Check the workflow logs for error details
+          - Verify database connectivity
+          - Check if database is accessible
+
+          ### Possible Causes
+          - Database connection issues
+          - Permission issues
+          - Lock contention
+          `;
+
+          await github.rest.issues.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: title,
+            body: body,
+            labels: ['bug', 'database', 'automated']
+          });

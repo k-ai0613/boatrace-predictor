@@ -83,7 +83,10 @@ class EnhancedFeatureEngineer:
             # 6. レース内相対特徴量
             features.update(self._relative_features(boat, race_data))
 
-            # 7. 複合特徴量
+            # 7. 詳細統計特徴量（racer_detailed_statsから）
+            features.update(self._detailed_stats_features(boat))
+
+            # 8. 複合特徴量
             features.update(self._composite_features(features))
 
             features_list.append(features)
@@ -244,6 +247,164 @@ class EnhancedFeatureEngineer:
             'is_top_exhibition': 1 if exhibition_rank == 1 else 0,
             'is_top_win_rate': 1 if win_rate_rank == 1 else 0,
         }
+
+    def _detailed_stats_features(self, boat):
+        """詳細統計特徴量（racer_detailed_statsから）"""
+        features = {}
+
+        # 選手の総合成績
+        racer_win_rate = boat.get('racer_overall_win_rate')
+        features['racer_win_rate'] = float(racer_win_rate) if racer_win_rate and not pd.isna(racer_win_rate) else 0.0
+
+        features['racer_second_rate'] = float(boat.get('racer_2nd_rate', 0)) if boat.get('racer_2nd_rate') and not pd.isna(boat.get('racer_2nd_rate')) else 0.0
+        features['racer_third_rate'] = float(boat.get('racer_3rd_rate', 0)) if boat.get('racer_3rd_rate') and not pd.isna(boat.get('racer_3rd_rate')) else 0.0
+
+        # 選手の平均ST
+        racer_avg_st = boat.get('racer_avg_st')
+        features['racer_avg_st'] = float(racer_avg_st) if racer_avg_st and not pd.isna(racer_avg_st) else 0.15
+
+        # SG出場回数
+        sg_appearances = boat.get('sg_appearances')
+        features['sg_appearances'] = int(sg_appearances) if sg_appearances and not pd.isna(sg_appearances) else 0
+        features['high_grade_experience'] = 1 if features['sg_appearances'] > 0 else 0
+
+        # フライング・出遅れ
+        features['late_start_count'] = int(boat.get('racer_late_count', 0) or 0)
+        features['penalty_risk_score'] = features['late_start_count'] * 0.5
+
+        # グレード別成績（grade_stats）
+        grade_stats = boat.get('grade_stats')
+        if grade_stats and isinstance(grade_stats, dict):
+            sg_stats = grade_stats.get('SG', {})
+            features['sg_win_rate'] = float(sg_stats.get('win_rate', 0))
+            features['sg_experience_score'] = 1 if sg_stats.get('races', 0) > 0 else 0
+
+            g1_stats = grade_stats.get('G1', {})
+            features['g1_win_rate'] = float(g1_stats.get('win_rate', 0))
+
+            g2_stats = grade_stats.get('G2', {})
+            features['g2_win_rate'] = float(g2_stats.get('win_rate', 0))
+
+            g3_stats = grade_stats.get('G3', {})
+            features['g3_win_rate'] = float(g3_stats.get('win_rate', 0))
+
+            features['racer_grade_score'] = (
+                features['sg_win_rate'] * 2.0 +
+                features['g1_win_rate'] * 1.5 +
+                features['g2_win_rate'] * 1.2 +
+                features['g3_win_rate'] * 1.0
+            )
+
+            total_yusyutsu = sum(g.get('yusyutsu', 0) for g in grade_stats.values() if isinstance(g, dict))
+            total_yusho = sum(g.get('yusho', 0) for g in grade_stats.values() if isinstance(g, dict))
+            features['total_yusyutsu'] = total_yusyutsu
+            features['total_yusho'] = total_yusho
+            features['yusyutsu_rate'] = total_yusyutsu * 0.1
+            features['yusho_rate'] = total_yusho * 0.2
+        else:
+            features['sg_win_rate'] = 0.0
+            features['sg_experience_score'] = 0
+            features['g1_win_rate'] = 0.0
+            features['g2_win_rate'] = 0.0
+            features['g3_win_rate'] = 0.0
+            features['racer_grade_score'] = 0.0
+            features['total_yusyutsu'] = 0
+            features['total_yusho'] = 0
+            features['yusyutsu_rate'] = 0.0
+            features['yusho_rate'] = 0.0
+
+        # コース別成績（course_stats）
+        course_stats = boat.get('course_stats')
+        boat_number = int(boat.get('boat_number', 1))
+
+        if course_stats and isinstance(course_stats, dict):
+            course_data = None
+            for key in course_stats.keys():
+                if str(boat_number) in key:
+                    course_data = course_stats[key]
+                    break
+
+            if course_data and isinstance(course_data, dict):
+                features['course_specific_1st_rate'] = float(course_data.get('1st_rate', 0))
+                features['course_win_rate_venue'] = float(course_data.get('win_rate', 0))
+                features['course_nige_rate'] = float(course_data.get('nige_rate', 0)) if 'nige_rate' in course_data else 0.0
+                features['course_sashi_rate'] = float(course_data.get('sashi_rate', 0)) if 'sashi_rate' in course_data else 0.0
+                features['course_makuri_rate'] = float(course_data.get('makuri_rate', 0)) if 'makuri_rate' in course_data else 0.0
+            else:
+                features['course_specific_1st_rate'] = 0.0
+                features['course_win_rate_venue'] = 0.0
+                features['course_nige_rate'] = 0.0
+                features['course_sashi_rate'] = 0.0
+                features['course_makuri_rate'] = 0.0
+        else:
+            features['course_specific_1st_rate'] = 0.0
+            features['course_win_rate_venue'] = 0.0
+            features['course_nige_rate'] = 0.0
+            features['course_sashi_rate'] = 0.0
+            features['course_makuri_rate'] = 0.0
+
+        # 会場別成績（venue_stats）
+        venue_stats = boat.get('venue_stats')
+        venue_id = int(boat.get('venue_id', 1))
+
+        if venue_stats and isinstance(venue_stats, dict):
+            venue_data = None
+            venue_name = self.VENUE_NAMES.get(venue_id, '')
+            for key in venue_stats.keys():
+                if venue_name and venue_name in key:
+                    venue_data = venue_stats[key]
+                    break
+
+            if venue_data and isinstance(venue_data, dict):
+                features['venue_specific_win_rate'] = float(venue_data.get('win_rate', 0))
+                features['venue_specific_1st_rate'] = float(venue_data.get('1st_rate', 0))
+                features['venue_specific_2nd_rate'] = float(venue_data.get('2nd_rate', 0))
+                features['racer_win_rate_venue'] = float(venue_data.get('win_rate', 0))
+                features['racer_avg_st_venue'] = float(venue_data.get('avg_st', 0.15))
+                features['venue_experience'] = int(venue_data.get('races', 0))
+                features['racer_venue_experience'] = features['venue_experience']
+            else:
+                features['venue_specific_win_rate'] = 0.0
+                features['venue_specific_1st_rate'] = 0.0
+                features['venue_specific_2nd_rate'] = 0.0
+                features['racer_win_rate_venue'] = 0.0
+                features['racer_avg_st_venue'] = 0.15
+                features['venue_experience'] = 0
+                features['racer_venue_experience'] = 0
+        else:
+            features['venue_specific_win_rate'] = 0.0
+            features['venue_specific_1st_rate'] = 0.0
+            features['venue_specific_2nd_rate'] = 0.0
+            features['racer_win_rate_venue'] = 0.0
+            features['racer_avg_st_venue'] = 0.15
+            features['venue_experience'] = 0
+            features['racer_venue_experience'] = 0
+
+        # 総合能力スコア
+        features['total_ability_score'] = (
+            features['racer_win_rate'] * 0.3 +
+            features['racer_grade_score'] * 0.2 +
+            features['venue_specific_win_rate'] * 0.2 +
+            features['course_specific_1st_rate'] * 0.3
+        )
+
+        # その他の特徴量（デフォルト値）
+        features['racer_motor_score'] = 0.0
+        features['motor_second_rate'] = float(boat.get('motor_rate_2', 30.0) or 30.0)
+        features['motor_third_rate'] = float(boat.get('motor_rate_3', 50.0) or 50.0)
+        features['boat_num_specific_1st_rate'] = 0.0
+        features['boat_num_specific_2nd_rate'] = 0.0
+        features['boat_num_affinity'] = 0.0
+        features['recent_5races_avg'] = features['racer_win_rate']
+        features['recent_10races_avg'] = features['racer_win_rate']
+        features['trend_score'] = 0.0
+        features['temperature'] = 0.0
+        features['wind_speed'] = 0.0
+        features['wind_direction'] = 0.0
+        features['wave_height'] = 0.0
+        features['wind_impact_score'] = 0.0
+
+        return features
 
     def _composite_features(self, features):
         """複合特徴量"""

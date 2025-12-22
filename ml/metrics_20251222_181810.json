@@ -1,7 +1,12 @@
 {
-  "timestamp": "20251222_181124",
-  "best_score": 0.31409194282001296,
-  "best_params": {
+  "timestamp": "20251222_181810",
+  "metrics": {
+    "accuracy": 0.31180961663417806,
+    "log_loss": 1.6135891459977605,
+    "win_accuracy": 0.34381091617933723,
+    "top3_accuracy": 0.5713937621832359
+  },
+  "params": {
     "colsample_bytree": 0.8404460046972835,
     "gamma": 0.35403628889802274,
     "learning_rate": 0.013911053916202464,
@@ -11,6 +16,5 @@
     "reg_alpha": 0.0007787658410143283,
     "reg_lambda": 1.984423118582435,
     "subsample": 0.8469926038510867
-  },
-  "note": "RandomizedSearchCV with StratifiedKFold CV"
+  }
 }

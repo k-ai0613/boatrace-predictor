@@ -44,7 +44,7 @@ def fetch_race_data(race_id):
         conn.close()
         raise ValueError(f"Race ID {race_id} not found")
 
-    # レースエントリー情報（race_entriesの全データを取得）
+    # レースエントリー情報（race_entriesの全データ + racer_detailed_statsを取得）
     query = """
         SELECT
             re.race_id,
@@ -74,10 +74,22 @@ def fetch_race_data(race_id):
             r.race_number,
             r.grade as race_grade,
             rc.name as racer_name,
-            rc.racer_number
+            rc.racer_number,
+            rds.overall_win_rate as racer_overall_win_rate,
+            rds.overall_1st_rate as racer_1st_rate,
+            rds.overall_2nd_rate as racer_2nd_rate,
+            rds.overall_3rd_rate as racer_3rd_rate,
+            rds.avg_start_timing as racer_avg_st,
+            rds.sg_appearances,
+            rds.flying_count as racer_flying_count,
+            rds.late_start_count as racer_late_count,
+            rds.grade_stats,
+            rds.course_stats,
+            rds.venue_stats
         FROM race_entries re
         JOIN races r ON re.race_id = r.id
         LEFT JOIN racers rc ON re.racer_id = rc.id
+        LEFT JOIN racer_detailed_stats rds ON rc.racer_number = rds.racer_number
         WHERE re.race_id = %s
         ORDER BY re.boat_number
     """
