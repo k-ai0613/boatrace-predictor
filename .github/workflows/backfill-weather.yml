@@ -10,12 +10,12 @@ on:
       limit:
         description: 'Maximum combinations to process'
         required: false
-        default: '2400'
+        default: '1200'
 
 jobs:
   backfill-weather:
     runs-on: ubuntu-latest
-    timeout-minutes: 130  # 2時間 + バッファ
+    timeout-minutes: 90  # 1200組み合わせ × 3秒 = 60分 + バッファ
 
     steps:
       - name: Checkout repository
