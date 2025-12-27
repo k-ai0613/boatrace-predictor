@@ -3,19 +3,18 @@ name: Backfill Weather Data
 on:
   schedule:
     # 06:00 JST = 21:00 UTC (前日)
-    # 他のワークフローと被らない時間帯
     - cron: '0 21 * * *'
   workflow_dispatch:
     inputs:
       limit:
-        description: 'Maximum combinations to process'
+        description: 'Maximum combinations to process (0 = all)'
         required: false
-        default: '1200'
+        default: '0'
 
 jobs:
   backfill-weather:
     runs-on: ubuntu-latest
-    timeout-minutes: 150  # 2400組み合わせ × 3秒 = 120分 + バッファ
+    timeout-minutes: 180  # Open-Meteo APIは高速なので全件処理可能
 
     steps:
       - name: Checkout repository
@@ -60,14 +59,19 @@ jobs:
           echo "All weather data has been backfilled!"
           echo "Consider disabling this workflow."
 
-      - name: Run weather backfill
+      - name: Run weather backfill (Open-Meteo API)
         if: steps.check.outputs.pending != '0'
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
-          LIMIT=${{ github.event.inputs.limit || '2400' }}
-          echo "Processing up to $LIMIT combinations..."
-          python scraper/backfill_weather.py --limit $LIMIT --delay 3.0
+          LIMIT=${{ github.event.inputs.limit || '0' }}
+          if [ "$LIMIT" = "0" ]; then
+            echo "Processing ALL pending combinations..."
+            python scraper/backfill_weather_openmeteo.py --delay 0.5
+          else
+            echo "Processing up to $LIMIT combinations..."
+            python scraper/backfill_weather_openmeteo.py --limit $LIMIT --delay 0.5
+          fi
 
       - name: Report progress
         if: always()
@@ -120,8 +124,9 @@ jobs:
 
           remaining = total - completed
           if remaining > 0:
-              days_left = remaining / 2400
-              print(f'Estimated days remaining: {days_left:.1f}')
+              # Open-Meteo APIは0.5秒/リクエスト
+              hours_left = remaining * 0.5 / 3600
+              print(f'Estimated hours remaining: {hours_left:.1f}')
           else:
               print('COMPLETE!')
           "
