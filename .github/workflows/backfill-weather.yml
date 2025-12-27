@@ -15,7 +15,7 @@ on:
 jobs:
   backfill-weather:
     runs-on: ubuntu-latest
-    timeout-minutes: 90  # 1200組み合わせ × 3秒 = 60分 + バッファ
+    timeout-minutes: 150  # 2400組み合わせ × 3秒 = 120分 + バッファ
 
     steps:
       - name: Checkout repository
